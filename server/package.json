@@ -1,0 +1,27 @@
+{
+  "name": "mayhem-companion-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "test": "tsx --test test/*.test.ts",
+    "type-check": "tsc --noEmit -p tsconfig.json",
+    "seed:demo": "tsx src/cli.ts seed-demo",
+    "rollback": "tsx src/cli.ts rollback"
+  },
+  "dependencies": {
+    "fastify": "^5.6.0",
+    "pg": "^8.16.3",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "@types/pg": "^8.15.5",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

@@ -1,0 +1,179 @@
+# 自动海克斯检测使用指南
+
+## 功能概述
+
+应用会在实际对局阶段自动截图并识别海克斯选择界面，然后按窗口偏好在顶部浮窗和右侧推荐列表中展示海克斯胜率和推荐度。普通游戏画面约每 1.5 秒检查一次，确认进入海克斯选择界面且识别到候选后恢复为 500 ms；自动截图使用 `1024x576`，手动 F1 截图仍保留原有 `1280x720` 默认值。识别到三张海克斯时会优先按左、中、右卡片区域确定顺序。
+
+自动识别只在 LCU gameflow 的 `InProgress` 阶段允许运行。选人阶段 `ChampSelect` 会打开英雄详情并在顶部展示 ARAM bench 建议，不运行游戏内海克斯 OCR。
+
+## 使用流程
+
+1. 启动应用。
+2. 启动 League Client 并进入主界面；应用会优先从运行中的客户端自动发现 LCU。
+3. 进入对局。
+4. 进入 `InProgress` 后，应用按 gameflow 控制自动截图服务。
+5. 出现海克斯选择界面时，应用识别 3 张卡片并展示推荐。
+6. 离开实际对局阶段后，应用会暂停或清空游戏内海克斯顶部浮窗和右侧推荐列表，避免过期结果残留。
+
+如果自动发现失败，展开主界面「游戏目录」并选择英雄联盟安装目录作为高级兜底。该目录只用于读取 LCU lockfile / 日志，不是正常启动的必填项。
+
+## 两种使用方式
+
+### 全自动
+
+- 进入实际对局后自动启动。
+- 海克斯出现时自动识别。
+- 结果通过海克斯顶部浮窗和右侧推荐列表展示；两者都可在主界面「窗口偏好」中单独关闭。
+
+### 手动触发
+
+- 按 F1 手动截图和分析。
+- 适用于自动识别失败或需要重新查看时。
+
+## 识别和通知条件
+
+当前通知条件较严格：
+
+| 条件 | 说明 |
+|------|------|
+| 识别到 3 张卡片 | 必须是完整海克斯选择界面 |
+| 间距验证通过 | `isAugmentPhase` 为 true |
+| 置信度 > 90% | 降低误报 |
+| 海克斯组合变化 | 相同组合不会重复通知 |
+
+检测到 0 张或长时间只检测到部分卡片时，会清空旧浮窗状态。切换海克斯或刷新卡片时如果出现短暂动画帧，自动截图服务会临时保留上一轮完整结果；只有连续多次缺失并超过宽限时间，才会清空浮窗，避免动画造成误清空或闪烁。部分识别只会更新已经显示的完整三卡浮窗；如果此前没有完整三卡结果，单卡或双卡识别不会打开浮窗。
+
+## OCR 性能策略
+
+图像分析会先采样标题区域判断是否像海克斯卡片界面，再采样卡片底部刷新按钮区域；没有刷新按钮时会跳过 OCR。明显无关的截图不会进入 PaddleOCR。
+
+进入 OCR 后优先走标题区快速路径：
+
+1. 如果标题区域指纹与上一轮完整 3 卡结果足够接近，且缓存未超过 30 秒，直接复用上一轮结果。
+2. 未命中缓存时，只识别左/中/右单卡标题区域，并按卡位写入结果。
+3. 如果某个卡位没有读到标题，该位置保持为空槽，不用宽区域 OCR fallback 补齐。
+
+这套顺序用于降低 OCR 调用次数，同时保持左、中、右卡片顺序稳定。只有完整 3 卡结果会进入标题指纹缓存，部分识别结果只用于更新已显示浮窗中的已读卡位。
+
+名称匹配会优先读取 LCU `/riotclient/region-locale` 返回的游戏语言。当前游戏语言和默认数据语言只准备 manifest 与 `augments.json`，其他支持语言在后台加载且失败后可重试；这条 OCR 路径不会下载完整英雄数据集。目标语言数据不可用时，已有语言的识别不会被后台加载阻塞。
+
+PaddleOCR 模型随应用打包在 `resources/paddleocr/`。提交海克斯 OCR、裁剪区域或名称匹配改动前，应运行 `npm run test:augment-ocr` 检查仓库内固定样本。
+
+`ARAMGG_OCR_LOCALE` 只用于测试或诊断时固定 OCR 语言提示，例如 `zh-CN`；正常开发和安装版不要设置它，生产运行继续以 LCU `/riotclient/region-locale` 为准。固定 OCR fixtures 会自行使用临时用户目录和最小名称库，不读取真实用户缓存。
+
+## 配置和状态
+
+### 界面与数据语言
+
+主界面状态栏右上角的语言菜单可选择简体中文、English 或繁體中文；其下方的客户端版本、数据版本和 LCU 连接保持一行三列。切换成功后，主窗口、英雄详情、席位推荐、海克斯顶部浮窗、右侧推荐列表和赛后海报会立即使用目标语言，并重新加载同语言英雄、海克斯和装备数据。
+
+应用会先确认目标语言的完整数据集可用，再提交语言变更。准备期间只有语言菜单显示局部旋转进度并暂时禁用，其余主界面保持可操作；提交后的远端版本信息在后台刷新，不会继续占用切换 loading。准备失败时菜单会恢复，所有窗口和数据继续使用原语言，不会出现界面已切换但数据仍为旧语言的半切换状态。新窗口启动时会先读取当前语言再挂载界面。
+
+### LCU 发现与游戏目录兜底
+
+LCU token 和端口默认从运行中的 League Client / LeagueClientUx 进程发现。进程信息不可见时，主进程会尝试从进程路径旁的 `lockfile` 和 League Client 日志兜底。
+
+主界面「游戏目录」是可折叠的高级兜底，只在自动发现失败后生效。保存后会写入 electron-store 的 `lolPath`，并用于查找安装目录下的 `lockfile`、`LeagueClient/` 和 `Logs/`。
+
+主界面「窗口偏好」会写入 electron-store：
+
+| 配置 | 默认 | 说明 |
+|------|------|------|
+| 展示英雄详情 | 开启 | 控制独立英雄详情窗口。关闭时立即隐藏并阻止后续显示，但不停止英雄监控和其他后台功能；重新开启后等待下一次正常选人或英雄变化再显示 |
+| 展示海克斯顶部浮窗 | 开启 | 控制 `/floating-overlay` 顶部三卡浮窗 |
+| 展示海克斯右侧推荐列表 | 开启 | 控制 `/augment-side-panel` 右侧列表，复用英雄详情的海克斯和出装内容 |
+
+Renderer 只能通过 preload 暴露的业务 API 调用截图服务：
+
+```javascript
+const config = await electronAPI.autoScreenshot.getConfig()
+const stats = await electronAPI.autoScreenshot.getStats()
+
+await electronAPI.autoScreenshot.setConfig({
+  enableAnalysis: false,
+})
+```
+
+不要使用 `window.ipcRenderer`。
+
+`getConfig()` 和 `getStats()` 中与 gameflow 相关的字段：
+
+| 字段 | 说明 |
+|------|------|
+| `gameflowPhase` | 最后一次同步到截图服务的 LCU 阶段 |
+| `analysisPausedByGameflow` | 当前是否因阶段不合适而暂停 OCR |
+| `controlOwner` | `manual` 或 `gameflow`，用于区分手动控制和阶段托管 |
+| `captureTimeoutMs` | 自动截图源获取超时时间，避免截图任务长期卡住 |
+| `preferScreenCapture` | 自动 OCR 是否优先使用屏幕源截图 |
+| `captureMode` | gameflow 托管时为 `idle` 或 `active-selection` |
+| `activeInterval` | 当前模式的实际截图间隔 |
+| `idleInterval` | 未确认海克斯选择时的目标间隔 |
+| `thumbnailSize` | 当前截图缩略图尺寸；gameflow 自动截图为 `1024x576` |
+
+## 日志和调试文件
+
+安装版会优先把可变数据写到安装目录旁的 `aramgg_client-data/`，如果该目录不可写则回退到 Electron `userData`。
+
+- 日志目录：`logs/`
+- 主日志：`logs/app-YYYY-MM-DD.log`
+- OCR 调试截图：`ocr-partial-screenshots/`
+- 客户端数据缓存：`data/`
+- 应用配置：`config/`
+
+排查海克斯浮窗时，默认日志优先看这些主线信号：
+
+- `Augment detected`：已识别到完整三卡并准备通知浮窗。
+- `Augment partial update accepted`：刷新动画或短暂漏读时，用部分结果更新已显示的完整三卡浮窗。
+- `Augment full detection diagnostics`：完整三卡识别的槽位、指纹、按钮和 gate 摘要；会限频写入。
+- `Augment analysis not accepted`：截图分析未通过通知条件的原因；会限频写入。
+- `Auto screenshot summary` 和 `Auto screenshot first augment detection latency`：自动截图运行状态和首次识别耗时。
+- `Augment overlay cleared after OCR miss`：旧浮窗因连续 miss 被清空。
+
+更细的成功流水如 `Augment winrate enriched in main`、`Augment detection notification sent`、renderer 侧胜率查询分段耗时会写入 `debug` 日志；需要深查 IPC 或胜率补齐链路时，用 `LOG_LEVEL=DEBUG` 运行后再看 `rendererToMainDelayMs`、`mainDurationMs` 和 `mainToRendererDelayMs`。`notifyMode=main-winrate-inline` 表示主进程已随首包补齐胜率；`main-winrate-pending` 表示先显示基础结果；`main-winrate-late` 表示随后补齐胜率。英雄详情窗口和海克斯浮窗沿用 Electron 默认的后台节流策略；正式包的性能与发热采样方法见 `PERFORMANCE_DIAGNOSTICS.md`。
+
+## 常见问题
+
+### 没有自动识别
+
+检查：
+
+- LCU 是否连接成功。
+- 如果日志出现 `[LCU discovery] process query failed` 或 `[LCU discovery] no process auth found`，展开主界面「游戏目录」配置手动兜底。
+- `gameflowPhase` 是否为 `InProgress`。
+- `analysisPausedByGameflow` 是否为 `false`。
+- 是否手动关闭了 `enableAnalysis`。
+- 主界面「窗口偏好」是否关闭了顶部浮窗和右侧推荐列表。
+- 日志中是否有截图或 OCR 失败信息。
+
+### 第一局正常、第二局不识别
+
+优先查看 `logs/` 中自动截图服务的启动和停止记录。如果进入第二局 `InProgress` 后长时间没有截图计数，通常是上一轮截图任务卡住或截图源获取过慢。当前自动 OCR 会优先使用屏幕源截图、设置截图超时，并用 runId 隔离每一轮自动截图任务，避免上一局残留任务影响下一局。
+
+### 选人阶段为什么不识别海克斯
+
+选人阶段是 `ChampSelect`，不是实际对局。此阶段应用会在英雄详情顶部显示 ARAM bench 只读推荐，并会暂停或清空游戏内海克斯 OCR 状态。
+
+### 如何关闭自动识别
+
+在应用配置面板关闭自动分析，或通过 preload API：
+
+```javascript
+await electronAPI.autoScreenshot.setConfig({
+  enableAnalysis: false,
+})
+```
+
+### 为什么浮窗自动消失
+
+阶段切换到 `ChampSelect`、`Lobby`、`EndOfGame` 等非实际对局阶段，或 OCR 长时间检测不到海克斯卡片时，会清空旧结果。短暂只读到部分卡位时，浮窗和右侧推荐列表会保留三卡位布局，未读到的位置显示为空槽。
+
+## 相关文件
+
+- 自动截图服务：`src/main/auto-screenshot-service.ts`
+- 图像分析：`src/main/image-analyzer.ts`
+- 主进程 gameflow 监控：`src/main/modules/app-config.ts`
+- 海克斯浮窗：`src/renderer/components/AugmentFloatingOverlay.vue`
+- 海克斯右侧推荐列表：`src/renderer/components/AugmentSidePanelView.vue`
+- 窗口偏好：`src/renderer/components/OverlayPreferences.vue`、`src/main/modules/user-preferences.ts`
+- 英雄详情窗口：`src/renderer/components/AugmentWinrateOverlay.vue`
+- ARAM 选人建议组件：`src/renderer/components/AramBenchRecommendation.vue`

@@ -1,0 +1,169 @@
+import { contextBridge, ipcRenderer } from 'electron'
+import type {
+  ElectronAPI,
+  ElectronEventChannel,
+  ElectronEventMap,
+} from '../shared/ipc-contract.ts'
+
+const validEvents = new Set<ElectronEventChannel>([
+  'fromMain',
+  'for-popup',
+  'screenshot-taken',
+  'winrate-updated',
+  'auto-screenshot-taken',
+  'game-phase-changed',
+  'champion-monitor-changed',
+  'champ-select-start',
+  'item-set-auto-apply-completed',
+  'game-started',
+  'game-in-progress',
+  'bench-recommendation-preview',
+  'augment-detection-started',
+  'augment-detected',
+  'augment-cleared',
+  'game-ended',
+  'end-of-game',
+  'post-game-share-ready',
+  'quit-confirm-requested',
+  'app-update-status-changed',
+  'locale-changed',
+  'match-history-updated',
+])
+
+function assertValidEvent(channel: string): asserts channel is ElectronEventChannel {
+  if (!validEvents.has(channel as ElectronEventChannel)) {
+    throw new Error(`Invalid event channel: ${channel}`)
+  }
+}
+
+const on = <K extends ElectronEventChannel>(
+  channel: K,
+  callback: (...args: ElectronEventMap[K]) => void,
+) => {
+  assertValidEvent(channel)
+  const handler = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => {
+    callback(...args as ElectronEventMap[K])
+  }
+  ipcRenderer.on(channel, handler)
+  return () => ipcRenderer.removeListener(channel, handler)
+}
+
+const once = <K extends ElectronEventChannel>(
+  channel: K,
+  callback: (...args: ElectronEventMap[K]) => void,
+) => {
+  assertValidEvent(channel)
+  const handler = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => {
+    callback(...args as ElectronEventMap[K])
+  }
+  ipcRenderer.once(channel, handler)
+  return () => ipcRenderer.removeListener(channel, handler)
+}
+
+const electronAPI: ElectronAPI = {
+  store: {
+    get: (key) => ipcRenderer.invoke('store-get', key),
+    set: (key, value) => ipcRenderer.invoke('store-set', key, value),
+    delete: (key) => ipcRenderer.invoke('store-delete', key),
+  },
+  windows: {
+    ready: () => ipcRenderer.send('renderer-ready'),
+    showPopup: (data) => ipcRenderer.send('show-popup', data),
+    hidePopup: (reason) => ipcRenderer.send('hide-popup', reason),
+    hideFloating: (reason) => ipcRenderer.send('hide-floating', reason),
+    hideAugmentSidePanel: (reason) => ipcRenderer.send('hide-augment-side-panel', reason),
+    toggleMain: () => ipcRenderer.send('toggle-main-window'),
+    confirmQuit: () => ipcRenderer.invoke('confirm-quit-app'),
+    restart: () => ipcRenderer.send('restart-app'),
+  },
+  appInfo: {
+    getVersionInfo: () => ipcRenderer.invoke('get-version-info'),
+    openLogDirectory: () => ipcRenderer.invoke('open-log-directory'),
+  },
+  appUpdate: {
+    getState: () => ipcRenderer.invoke('app-update-get-state'),
+    check: () => ipcRenderer.invoke('app-update-check'),
+    download: () => ipcRenderer.invoke('app-update-download'),
+    install: () => ipcRenderer.invoke('app-update-install'),
+  },
+  analytics: {
+    getStatus: () => ipcRenderer.invoke('analytics-get-status'),
+    setEnabled: (enabled) => ipcRenderer.invoke('analytics-set-enabled', enabled),
+    track: (name, properties) => ipcRenderer.invoke('analytics-track', name, properties),
+  },
+  locale: {
+    get: () => ipcRenderer.invoke('locale-get'),
+    set: (locale) => ipcRenderer.invoke('locale-set', locale),
+  },
+  screenshot: {
+    capture: () => ipcRenderer.invoke('screenshot-capture'),
+    analyze: (imagePathOrBuffer) => ipcRenderer.invoke('analyze-screenshot', imagePathOrBuffer),
+  },
+  winrate: {
+    get: (data) => ipcRenderer.invoke('get-winrate', data),
+    loadChampionData: (championId) => ipcRenderer.invoke('load-champion-data', championId),
+  },
+  autoScreenshot: {
+    start: (config) => ipcRenderer.invoke('auto-screenshot-start', config),
+    stop: () => ipcRenderer.invoke('auto-screenshot-stop'),
+    setConfig: (config) => ipcRenderer.invoke('auto-screenshot-set-config', config),
+    getStats: () => ipcRenderer.invoke('auto-screenshot-get-stats'),
+    getConfig: () => ipcRenderer.invoke('auto-screenshot-get-config'),
+  },
+  itemSets: {
+    getAramStatus: () => ipcRenderer.invoke('item-sets-get-aram-status'),
+    installAramChampion: (payload) => ipcRenderer.invoke('item-sets-install-aram-champion', payload),
+  },
+  matchHistory: {
+    getLocalSummary: () => ipcRenderer.invoke('match-history-get-local-summary'),
+    queryCurrent: (payload) => ipcRenderer.invoke('match-history-query-current', payload),
+  },
+  feedback: {
+    submit: (payload) => ipcRenderer.invoke('feedback-submit', payload),
+  },
+  lcu: {
+    getChampionMonitorState: () => ipcRenderer.invoke('lcu-get-champion-monitor-state'),
+    getChampionId: () => ipcRenderer.invoke('get-champion-id'),
+    getStatus: () => ipcRenderer.invoke('lcu-get-status'),
+    getCurrentSession: () => ipcRenderer.invoke('lcu-get-current-session'),
+    getChampSelectSnapshot: () => ipcRenderer.invoke('lcu-get-champ-select-snapshot'),
+    getAramBenchRecommendation: () => ipcRenderer.invoke('lcu-get-aram-bench-recommendation'),
+    getPerkList: () => ipcRenderer.invoke('lcu-get-perk-list'),
+    applyPerk: (data) => ipcRenderer.invoke('lcu-apply-perk', data),
+    getGameflowPhase: () => ipcRenderer.invoke('lcu-get-gameflow-phase'),
+    getManualLeaguePath: () => ipcRenderer.invoke('lcu-get-manual-league-path'),
+    selectManualLeaguePath: () => ipcRenderer.invoke('lcu-select-manual-league-path'),
+    validateManualLeaguePath: (lolPath) => ipcRenderer.invoke('lcu-validate-manual-league-path', lolPath),
+    setManualLeaguePath: (lolPath) => ipcRenderer.invoke('lcu-set-manual-league-path', lolPath),
+    clearManualLeaguePath: () => ipcRenderer.invoke('lcu-clear-manual-league-path'),
+  },
+  diagnostics: {
+    testShowFloating: (data) => ipcRenderer.invoke('test-show-floating', data),
+    testShowRandomFloating: () => ipcRenderer.invoke('test-show-random-floating'),
+    testShowRandomPopup: () => ipcRenderer.invoke('test-show-random-popup'),
+    testShowBenchRecommendation: () => ipcRenderer.invoke('test-show-bench-recommendation'),
+    logRendererError: (errorData) => ipcRenderer.invoke('log-renderer-error', errorData),
+    logRendererInfo: (data) => ipcRenderer.send('log-renderer-info', data),
+    testDatabaseLoad: () => ipcRenderer.invoke('test-database-load'),
+  },
+  shell: {
+    openExternal: (url) => {
+      const parsedUrl = new URL(url)
+      if (!['http:', 'https:', 'mailto:'].includes(parsedUrl.protocol)) {
+        throw new Error(`Unsupported external URL protocol: ${parsedUrl.protocol}`)
+      }
+      return ipcRenderer.invoke('shell-open-external', parsedUrl.toString())
+    },
+  },
+  postGameShare: {
+    getLatest: () => ipcRenderer.invoke('post-game-share-get-latest'),
+    refresh: () => ipcRenderer.invoke('post-game-share-refresh'),
+    createMock: () => ipcRenderer.invoke('post-game-share-create-mock'),
+    copyImage: (dataUrl) => ipcRenderer.invoke('post-game-share-copy-image', dataUrl),
+    saveImage: (dataUrl, suggestedFilename) =>
+      ipcRenderer.invoke('post-game-share-save-image', dataUrl, suggestedFilename),
+  },
+  events: { on, once },
+}
+
+contextBridge.exposeInMainWorld('electronAPI', electronAPI)

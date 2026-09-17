@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": [
+      "ES2022"
+    ],
+    "types": [
+      "node",
+      "electron"
+    ]
+  },
+  "include": [
+    "src/main/**/*.ts",
+    "src/main/**/*.d.ts",
+    "src/preload/**/*.ts",
+    "src/preload/**/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-electron",
+    "build",
+    "**/*.spec.ts"
+  ]
+}

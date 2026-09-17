@@ -1,0 +1,160 @@
+{
+  "name": "aramgg_client",
+  "version": "0.2.17",
+  "description": "Electron companion for League of Legends ARAM recommendations and augment OCR.",
+  "author": "ARAMGG",
+  "private": true,
+  "type": "module",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "node scripts/dev-electron.mjs",
+    "prepare:client-data": "node scripts/fetch-client-data.mjs",
+    "build": "electron-vite build",
+    "pack": "node scripts/pack-electron.mjs",
+    "start": "electron .",
+    "lint": "eslint src --ext .js,.ts,.vue",
+    "type-check": "vue-tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "type-check:watch": "vue-tsc -p tsconfig.renderer.json --noEmit --watch",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "test:packaged-windows": "node scripts/test-packaged-windows.mjs",
+    "test:augment-ocr": "node tests/electron/test-augment-ocr-fixtures.js",
+    "test:screenshots": "node tests/electron/test-screenshot-analysis.js",
+    "release:patch": "npm version patch -m \"chore: release v%s\"",
+    "release:minor": "npm version minor -m \"chore: release v%s\"",
+    "release:major": "npm version major -m \"chore: release v%s\"",
+    "release:push": "git push origin master --follow-tags"
+  },
+  "build": {
+    "productName": "aramgg_client",
+    "directories": {
+      "output": "build"
+    },
+    "compression": "maximum",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/sharp/**/*",
+      "node_modules/onnxruntime-node/**/*",
+      "node_modules/paddleocr/**/*"
+    ],
+    "afterPack": "scripts/after-pack.cjs",
+    "electronLanguages": [
+      "zh-CN",
+      "en-US",
+      "zh-TW"
+    ],
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "!**/*.map",
+      "!**/*.d.ts",
+      "!**/test/**",
+      "!**/tests/**",
+      "!**/__tests__/**",
+      "!**/*.spec.*",
+      "!**/*.test.*",
+      "!**/docs/**",
+      "!**/example/**",
+      "!**/examples/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/darwin/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/linux/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/paddleocr",
+        "to": "paddleocr"
+      },
+      {
+        "to": "client-data",
+        "from": "resources/client-data",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "verifyUpdateCodeSignature": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/icon.ico",
+      "artifactName": "aramgg_client Setup ${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "include": "installer/installer.nsh",
+      "perMachine": false,
+      "language": "2052",
+      "installerLanguages": [
+        "zh_CN"
+      ],
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "aramgg_client"
+    }
+  },
+  "dependencies": {
+    "axios": "^1.18.1",
+    "electron-store": "^11.0.2",
+    "electron-updater": "^6.8.9",
+    "fs-extra": "^11.3.5",
+    "onnxruntime-node": "^1.26.0",
+    "paddleocr": "^1.1.1",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.3.2",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/test-utils": "^2.4.10",
+    "@vue/tsconfig": "^0.9.1",
+    "@vueuse/core": "^14.3.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "electron": "42.2.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "eslint": "^10.4.0",
+    "eslint-plugin-vue": "^10.9.1",
+    "firebase": "^12.16.0",
+    "globals": "^17.6.0",
+    "happy-dom": "^20.9.0",
+    "lodash-es": "^4.18.1",
+    "lucide-vue-next": "^1.0.0",
+    "nanoid": "^5.1.11",
+    "reka-ui": "^2.9.7",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.2",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.63.0",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.10",
+    "vue": "^3.5.34",
+    "vue-i18n": "^11.4.6",
+    "vue-router": "^5.0.7",
+    "vue-tsc": "^3.2.9"
+  },
+  "overrides": {
+    "@babel/core": "^7.29.7",
+    "form-data": "^4.0.6",
+    "hono": "^4.12.28",
+    "js-yaml": "^4.3.0",
+    "protobufjs": "^7.6.5",
+    "qs": "^6.15.3",
+    "tar": "^7.5.19",
+    "tmp": "^0.2.7",
+    "undici": "^7.28.0"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions"
+  ]
+}

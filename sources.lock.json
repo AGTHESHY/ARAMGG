@@ -1,0 +1,14 @@
+{
+  "client": {
+    "repository": "https://github.com/valkia/aramgg_client.git",
+    "revision": "e07cef86e7f88a16aa6046eabfc4cc7c4ab8da5a",
+    "directory": "client",
+    "purpose": "Desktop client baseline; local modifications remain in this Git checkout"
+  },
+  "sona": {
+    "repository": "https://github.com/WJZ-P/sona.git",
+    "revision": "effcedfc769d711d207864b4c4e44015368ec601",
+    "directory": "references/sona",
+    "purpose": "Reference only; not imported, built or bundled"
+  }
+}

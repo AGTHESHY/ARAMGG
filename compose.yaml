@@ -1,0 +1,49 @@
+name: mayhem-companion
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: mayhem
+      POSTGRES_USER: mayhem
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mayhem-local-development}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mayhem -d mayhem"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  api:
+    build:
+      context: ./server
+      target: runtime
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8788
+      DATABASE_URL: postgres://mayhem:${POSTGRES_PASSWORD:-mayhem-local-development}@postgres:5432/mayhem
+      DATA_DIR: /app/data
+    ports:
+      - "127.0.0.1:${MAYHEM_PORT:-8788}:8788"
+    volumes:
+      - snapshot-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8788/health/ready').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  tests:
+    profiles: ["test"]
+    build:
+      context: ./server
+      target: test
+    environment:
+      TEST_DATABASE_URL: postgres://mayhem:${POSTGRES_PASSWORD:-mayhem-local-development}@postgres:5432/mayhem
+    depends_on:
+      postgres:
+        condition: service_healthy
+volumes:
+  postgres-data:
+  snapshot-data:

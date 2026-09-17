@@ -1,0 +1,95 @@
+diff --git a/.env.local.example b/.env.local.example
+index 8bf0a3a..46ef346 100644
+--- a/.env.local.example
++++ b/.env.local.example
+@@ -1,3 +1,4 @@
+-# Data API key for aramgg data service
+-# Get yours at: https://data.dtodo.cn/developer.html
+-ARAMGG_DATA_API_KEY=hx_live_your_key_here
++# Mayhem Companion reads public snapshots from our own service.
++# No Developer API key belongs in the desktop client configuration.
++# Export this variable in your shell for data preparation / builds.
++ARAMGG_DATA_API_ORIGIN=http://127.0.0.1:8788
+diff --git a/electron.vite.config.mjs b/electron.vite.config.mjs
+index fd4623a..7e4400b 100644
+--- a/electron.vite.config.mjs
++++ b/electron.vite.config.mjs
+@@ -45,6 +45,9 @@ export default defineConfig({
+     plugins: [externalizeDepsPlugin()],
+     envPrefix: ['VITE_', 'ARAMGG_'],
+     define: {
++      'import.meta.env.ARAMGG_DATA_API_ORIGIN': JSON.stringify(
++        process.env.ARAMGG_DATA_API_ORIGIN || 'http://127.0.0.1:8788'
++      ),
+       'import.meta.env.ARAMGG_DISTRIBUTION_CHANNEL': JSON.stringify(
+         matchHistoryBuildConfig.distributionChannel
+       ),
+diff --git a/scripts/fetch-client-data.mjs b/scripts/fetch-client-data.mjs
+index 0246fc1..0debec4 100644
+--- a/scripts/fetch-client-data.mjs
++++ b/scripts/fetch-client-data.mjs
+@@ -9,7 +9,7 @@ import {
+   resolveTrustedClientDataUrl,
+ } from '../src/shared/client-data-security.ts'
+ 
+-const DATA_API_ORIGIN = process.env.ARAMGG_DATA_API_ORIGIN || 'https://data.dtodo.cn'
++const DATA_API_ORIGIN = process.env.ARAMGG_DATA_API_ORIGIN || 'http://127.0.0.1:8788'
+ const DATA_ALLOWED_ORIGINS = process.env.ARAMGG_DATA_ALLOWED_ORIGINS || ''
+ const DATA_API_PREFIX = '/api/client/v1'
+ const DATA_API_CONFIG_PATH = `${DATA_API_PREFIX}/config`
+diff --git a/src/main/data-loader.ts b/src/main/data-loader.ts
+index acbc44d..b1fbe36 100644
+--- a/src/main/data-loader.ts
++++ b/src/main/data-loader.ts
+@@ -103,7 +103,7 @@ type OcrAugmentLocaleData = PreparedDataLocale & {
+ }
+ 
+ export const DATA_API_ORIGIN =
+-  process.env.ARAMGG_DATA_API_ORIGIN || 'https://data.dtodo.cn'
++  process.env.ARAMGG_DATA_API_ORIGIN || import.meta.env?.ARAMGG_DATA_API_ORIGIN || 'http://127.0.0.1:8788'
+ const DATA_ALLOWED_ORIGINS = process.env.ARAMGG_DATA_ALLOWED_ORIGINS || ''
+ export const DATA_API_PREFIX = '/api/client/v1'
+ export const DATA_API_CONFIG_PATH = `${DATA_API_PREFIX}/config`
+diff --git a/src/main/modules/onnxruntime-native-path.ts b/src/main/modules/onnxruntime-native-path.ts
+index 63594c2..ab4b564 100644
+--- a/src/main/modules/onnxruntime-native-path.ts
++++ b/src/main/modules/onnxruntime-native-path.ts
+@@ -40,9 +40,10 @@ export function getOnnxruntimeNativeDirCandidates({
+   packageDir?: string | null
+   configuredDir?: string
+ } = {}) {
++  const targetPath = platform === 'win32' ? path.win32 : path.posix
+   const nativeParts = [...ONNXRUNTIME_NATIVE_DIR_PARTS, platform, arch]
+   const packageNativeDir = packageDir
+-    ? path.join(packageDir, ...nativeParts)
++    ? targetPath.join(packageDir, ...nativeParts)
+     : null
+ 
+   return uniquePaths([
+@@ -50,10 +51,10 @@ export function getOnnxruntimeNativeDirCandidates({
+     packageNativeDir ? toAsarUnpackedPath(packageNativeDir) : null,
+     packageNativeDir,
+     resourcesPath
+-      ? path.join(resourcesPath, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', ...nativeParts)
++      ? targetPath.join(resourcesPath, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', ...nativeParts)
+       : null,
+-    path.join(cwd, 'node_modules', 'onnxruntime-node', ...nativeParts),
+-    path.resolve(moduleDir, '..', '..', 'node_modules', 'onnxruntime-node', ...nativeParts),
++    targetPath.join(cwd, 'node_modules', 'onnxruntime-node', ...nativeParts),
++    targetPath.resolve(moduleDir, '..', '..', 'node_modules', 'onnxruntime-node', ...nativeParts),
+   ])
+ }
+ 
+diff --git a/tests/unit/onnxruntime-native-path.test.ts b/tests/unit/onnxruntime-native-path.test.ts
+index 7bb25a3..13d1db8 100644
+--- a/tests/unit/onnxruntime-native-path.test.ts
++++ b/tests/unit/onnxruntime-native-path.test.ts
+@@ -28,7 +28,7 @@ describe('onnxruntime native path candidates', () => {
+       arch: 'x64',
+     })
+ 
+-    const expected = path.join(
++    const expected = path.win32.join(
+       'E:\\aramgg\\aramgg_client\\resources\\app.asar.unpacked',
+       'node_modules',
+       'onnxruntime-node',

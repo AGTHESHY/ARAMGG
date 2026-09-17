@@ -1,0 +1,1335 @@
+import { net } from 'electron'
+import logger from '../modules/logger.ts'
+import store from '../modules/app-store.ts'
+import type LCUService from './lcu/lcu-service.ts'
+import {
+  getChampionAugmentStats,
+  loadAugmentDetail,
+  loadChampionName,
+  loadChampionRoster,
+} from '../data-loader.ts'
+
+type AnyRecord = Record<string, any>
+
+export type PostGameShareStatBlock = {
+  kills: number | null
+  deaths: number | null
+  assists: number | null
+  kda: number | null
+  damageDealtToChampions: number | null
+  damageTaken: number | null
+  goldEarned: number | null
+  creepScore: number | null
+  killParticipation: number | null
+}
+
+export type PostGameShareChampion = {
+  id: number | null
+  name: string
+  nameEN: string
+  title: string
+  imageUrl: string
+  imageDataUrl: string | null
+}
+
+export type PostGameShareAugment = {
+  id: number | null
+  augmentId: number | null
+  name: string
+  rarity: string
+  iconPath: string | null
+  iconUrl: string
+  imageDataUrl: string | null
+  winRate: number | null
+  pickRate: number | null
+  recommendScore: number | null
+  source: string
+}
+
+export type PostGameSharePosterData = {
+  status: 'ready' | 'partial' | 'unavailable'
+  reason: string
+  result: 'victory' | 'defeat' | 'unknown'
+  gameMode: string
+  queueName: string
+  durationSeconds: number | null
+  summonerName: string
+  champion: PostGameShareChampion
+  stats: PostGameShareStatBlock
+  augments: PostGameShareAugment[]
+  sources: string[]
+  updatedAt: number
+}
+
+type SnapshotChampion = {
+  id: number | null
+  name: string
+  nameEN: string
+  title: string
+  imageUrl: string
+}
+
+type SnapshotAugment = Omit<PostGameShareAugment, 'imageDataUrl'>
+
+type PostGameShareSnapshot = {
+  result: PostGameSharePosterData['result']
+  gameMode: string
+  queueName: string
+  durationSeconds: number | null
+  summonerName: string
+  champion: SnapshotChampion
+  stats: PostGameShareStatBlock
+  augments: SnapshotAugment[]
+  identityCandidates: string[]
+  sources: string[]
+  updatedAt: number
+}
+
+type SnapshotUpdate = Partial<Omit<PostGameShareSnapshot, 'sources' | 'updatedAt'>> & {
+  sources?: string[]
+}
+
+const LIVE_SNAPSHOT_THROTTLE_MS = 5000
+const IMAGE_FETCH_TIMEOUT_MS = 1800
+const MAX_INLINE_IMAGE_BYTES = 2 * 1024 * 1024
+const MAX_RECURSION_DEPTH = 7
+
+const statKeySets = {
+  kills: new Set(['kills', 'numkills', 'championskilled']),
+  deaths: new Set(['deaths', 'numdeaths']),
+  assists: new Set(['assists', 'numassists']),
+  damageDealtToChampions: new Set([
+    'totaldamagedealttochampions',
+    'damagedealttochampions',
+    'totaldamagechampions',
+  ]),
+  damageTaken: new Set(['totaldamagetaken', 'damagetaken']),
+  goldEarned: new Set(['goldearned', 'gold']),
+  creepScore: new Set(['creepscore', 'minionskilled', 'totalminionskilled']),
+  killParticipation: new Set(['killparticipation', 'teamkillparticipation']),
+}
+
+const championIdKeys = new Set([
+  'championid',
+  'championids',
+  'selectedchampionid',
+  'playerchampionid',
+])
+const championNameKeys = new Set(['championname', 'rawchampionname', 'skinname'])
+const summonerNameKeys = new Set([
+  'summonername',
+  'riotid',
+  'riotidgamename',
+  'displayname',
+  'gamename',
+  'name',
+])
+const identityKeys = new Set([
+  'summonername',
+  'riotid',
+  'riotidgamename',
+  'displayname',
+  'gamename',
+  'internalname',
+  'name',
+  'puuid',
+])
+const resultKeys = new Set(['win', 'won', 'victory', 'gamewon', 'iswinner', 'result', 'gameresult'])
+const localPlayerKeys = new Set(['islocalplayer', 'localplayer', 'islocal', 'iscurrentplayer'])
+const durationKeys = new Set(['gamelength', 'gamelengthseconds', 'gameduration', 'duration'])
+
+let liveSnapshotAt = 0
+let currentSnapshot: PostGameShareSnapshot = createEmptySnapshot('init')
+let latestPosterData: PostGameSharePosterData | null = null
+let preparePosterPromise: Promise<{ success: boolean; data: PostGameSharePosterData; error?: string }> | null = null
+let championLookupPromise: Promise<Map<string, number>> | null = null
+let mockAugmentCountCursor = 0
+
+function createEmptyStats(): PostGameShareStatBlock {
+  return {
+    kills: null,
+    deaths: null,
+    assists: null,
+    kda: null,
+    damageDealtToChampions: null,
+    damageTaken: null,
+    goldEarned: null,
+    creepScore: null,
+    killParticipation: null,
+  }
+}
+
+function createEmptyChampion(): SnapshotChampion {
+  return {
+    id: null,
+    name: '',
+    nameEN: '',
+    title: '',
+    imageUrl: '',
+  }
+}
+
+function createEmptySnapshot(reason: string): PostGameShareSnapshot {
+  return {
+    result: 'unknown',
+    gameMode: 'ARAM',
+    queueName: 'ARAM',
+    durationSeconds: null,
+    summonerName: '',
+    champion: createEmptyChampion(),
+    stats: createEmptyStats(),
+    augments: [],
+    identityCandidates: [],
+    sources: reason ? [reason] : [],
+    updatedAt: Date.now(),
+  }
+}
+
+function isRecord(value: unknown): value is AnyRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizeKey(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function normalizeIdentityText(value: unknown): string {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .trim()
+}
+
+function normalizeChampionLookupText(value: unknown): string {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/^game_character_displayname_/i, '')
+    .replace(/[''.\s_-]+/g, '')
+    .trim()
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().replace(/,/g, '')
+    if (!normalized) {
+      return null
+    }
+    const parsed = Number(normalized)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  return null
+}
+
+function toPositiveInteger(value: unknown): number | null {
+  const numberValue = toFiniteNumber(value)
+  if (numberValue == null || !Number.isInteger(numberValue) || numberValue <= 0) {
+    return null
+  }
+
+  return numberValue
+}
+
+function getStringValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function readNumberByKeys(value: unknown, keys: Set<string>, depth = 0, seen = new WeakSet<object>()): number | null {
+  if (depth > MAX_RECURSION_DEPTH || value == null) {
+    return null
+  }
+
+  const directNumber = toFiniteNumber(value)
+  if (directNumber != null && depth === 0) {
+    return directNumber
+  }
+
+  if (!isRecord(value) && !Array.isArray(value)) {
+    return null
+  }
+
+  if (seen.has(value)) {
+    return null
+  }
+  seen.add(value)
+
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 40)) {
+      const found = readNumberByKeys(item, keys, depth + 1, seen)
+      if (found != null) {
+        return found
+      }
+    }
+    return null
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    if (keys.has(normalizeKey(key))) {
+      const found = toFiniteNumber(child)
+      if (found != null) {
+        return found
+      }
+    }
+  }
+
+  for (const child of Object.values(value)) {
+    const found = readNumberByKeys(child, keys, depth + 1, seen)
+    if (found != null) {
+      return found
+    }
+  }
+
+  return null
+}
+
+function readStringByKeys(value: unknown, keys: Set<string>, depth = 0, seen = new WeakSet<object>()): string {
+  if (depth > MAX_RECURSION_DEPTH || value == null || (!isRecord(value) && !Array.isArray(value))) {
+    return ''
+  }
+
+  if (seen.has(value)) {
+    return ''
+  }
+  seen.add(value)
+
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 40)) {
+      const found = readStringByKeys(item, keys, depth + 1, seen)
+      if (found) {
+        return found
+      }
+    }
+    return ''
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    if (keys.has(normalizeKey(key))) {
+      const found = getStringValue(child)
+      if (found) {
+        return found
+      }
+    }
+  }
+
+  for (const child of Object.values(value)) {
+    const found = readStringByKeys(child, keys, depth + 1, seen)
+    if (found) {
+      return found
+    }
+  }
+
+  return ''
+}
+
+function readBooleanByKeys(value: unknown, keys: Set<string>, depth = 0, seen = new WeakSet<object>()): boolean | null {
+  if (depth > MAX_RECURSION_DEPTH || value == null || (!isRecord(value) && !Array.isArray(value))) {
+    return null
+  }
+
+  if (seen.has(value)) {
+    return null
+  }
+  seen.add(value)
+
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 40)) {
+      const found = readBooleanByKeys(item, keys, depth + 1, seen)
+      if (found != null) {
+        return found
+      }
+    }
+    return null
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    if (keys.has(normalizeKey(key)) && typeof child === 'boolean') {
+      return child
+    }
+  }
+
+  for (const child of Object.values(value)) {
+    const found = readBooleanByKeys(child, keys, depth + 1, seen)
+    if (found != null) {
+      return found
+    }
+  }
+
+  return null
+}
+
+function normalizeResult(value: unknown): PostGameSharePosterData['result'] {
+  if (typeof value === 'boolean') {
+    return value ? 'victory' : 'defeat'
+  }
+
+  const text = String(value || '').trim().toLowerCase()
+  if (!text) {
+    return 'unknown'
+  }
+
+  if (['win', 'won', 'victory', 'victorious', 'success'].includes(text)) {
+    return 'victory'
+  }
+
+  if (['loss', 'lose', 'lost', 'defeat', 'fail', 'failed'].includes(text)) {
+    return 'defeat'
+  }
+
+  return 'unknown'
+}
+
+function readResult(value: unknown): PostGameSharePosterData['result'] {
+  const booleanResult = readBooleanByKeys(value, resultKeys)
+  if (booleanResult != null) {
+    return normalizeResult(booleanResult)
+  }
+
+  return normalizeResult(readStringByKeys(value, resultKeys))
+}
+
+function extractChampionId(value: unknown): number | null {
+  return toPositiveInteger(readNumberByKeys(value, championIdKeys))
+}
+
+function extractChampionName(value: unknown): string {
+  return readStringByKeys(value, championNameKeys)
+}
+
+function extractSummonerName(value: unknown): string {
+  return readStringByKeys(value, summonerNameKeys)
+}
+
+function extractDurationSeconds(value: unknown): number | null {
+  const duration = readNumberByKeys(value, durationKeys)
+  if (duration == null || duration <= 0) {
+    return null
+  }
+
+  return duration > 10000 ? Math.round(duration / 1000) : Math.round(duration)
+}
+
+function extractStats(value: unknown): PostGameShareStatBlock {
+  const stats = createEmptyStats()
+  stats.kills = readNumberByKeys(value, statKeySets.kills)
+  stats.deaths = readNumberByKeys(value, statKeySets.deaths)
+  stats.assists = readNumberByKeys(value, statKeySets.assists)
+  stats.damageDealtToChampions = readNumberByKeys(value, statKeySets.damageDealtToChampions)
+  stats.damageTaken = readNumberByKeys(value, statKeySets.damageTaken)
+  stats.goldEarned = readNumberByKeys(value, statKeySets.goldEarned)
+  stats.creepScore = readNumberByKeys(value, statKeySets.creepScore)
+  stats.killParticipation = readNumberByKeys(value, statKeySets.killParticipation)
+
+  if (stats.kills != null && stats.deaths != null && stats.assists != null) {
+    stats.kda = stats.deaths === 0
+      ? stats.kills + stats.assists
+      : Number(((stats.kills + stats.assists) / stats.deaths).toFixed(2))
+  }
+
+  if (stats.killParticipation != null && stats.killParticipation > 1 && stats.killParticipation <= 100) {
+    stats.killParticipation = stats.killParticipation / 100
+  }
+
+  return stats
+}
+
+function hasAnyStats(stats: PostGameShareStatBlock): boolean {
+  return Object.values(stats).some((value) => value != null)
+}
+
+function collectIdentityCandidates(value: unknown, results = new Set<string>(), depth = 0, seen = new WeakSet<object>()): string[] {
+  if (depth > MAX_RECURSION_DEPTH || value == null || (!isRecord(value) && !Array.isArray(value))) {
+    return [...results]
+  }
+
+  if (seen.has(value)) {
+    return [...results]
+  }
+  seen.add(value)
+
+  if (Array.isArray(value)) {
+    value.slice(0, 20).forEach((item) => collectIdentityCandidates(item, results, depth + 1, seen))
+    return [...results]
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    if (identityKeys.has(normalizeKey(key))) {
+      const normalized = normalizeIdentityText(child)
+      if (normalized) {
+        results.add(normalized)
+      }
+    }
+  }
+
+  return [...results]
+}
+
+function getNestedValue(source: unknown, path: string[]): unknown {
+  return path.reduce<unknown>((current, key) => isRecord(current) ? current[key] : undefined, source)
+}
+
+function getLikelyChampionIdFromGameflowSession(session: unknown): number | null {
+  const directPaths = [
+    ['gameData', 'playerChampionSelection', 'championId'],
+    ['gameData', 'playerChampionSelection', 'selectedChampionId'],
+    ['gameData', 'selectedChampionId'],
+    ['gameData', 'championId'],
+    ['playerChampionSelection', 'championId'],
+    ['playerChampionSelection', 'selectedChampionId'],
+  ]
+
+  for (const path of directPaths) {
+    const championId = toPositiveInteger(getNestedValue(session, path))
+    if (championId) {
+      return championId
+    }
+  }
+
+  return extractChampionId(session)
+}
+
+async function getChampionLookup(): Promise<Map<string, number>> {
+  if (championLookupPromise) {
+    return championLookupPromise
+  }
+
+  championLookupPromise = (async () => {
+    const roster = await loadChampionRoster()
+    const lookup = new Map<string, number>()
+    for (const champion of roster) {
+      const championId = toPositiveInteger(champion?.championId ?? champion?.id)
+      if (!championId) {
+        continue
+      }
+
+      const keys = [
+        champion?.alias,
+        champion?.nameEN,
+        champion?.nameCN,
+      ]
+        .map(normalizeChampionLookupText)
+        .filter(Boolean)
+
+      keys.forEach((key) => lookup.set(key, championId))
+    }
+    return lookup
+  })().catch((error: unknown) => {
+    const err = error as Error
+    championLookupPromise = null
+    logger.warn('[post-game-share] failed to load champion lookup:', err.message)
+    return new Map<string, number>()
+  })
+
+  return championLookupPromise
+}
+
+async function resolveChampionIdFromName(championName: string): Promise<number | null> {
+  const normalized = normalizeChampionLookupText(championName)
+  if (!normalized) {
+    return null
+  }
+
+  const lookup = await getChampionLookup()
+  return lookup.get(normalized) || null
+}
+
+function looksLikePlayerRecord(record: AnyRecord): boolean {
+  if (Array.isArray(record.allPlayers) || Array.isArray(record.teams) || Array.isArray(record.participants)) {
+    return false
+  }
+
+  const stats = extractStats(record)
+  if (!hasAnyStats(stats)) {
+    return false
+  }
+
+  return Boolean(
+    extractChampionId(record) ||
+    extractChampionName(record) ||
+    extractSummonerName(record) ||
+    collectIdentityCandidates(record).length
+  )
+}
+
+function collectPlayerCandidates(value: unknown, results: AnyRecord[] = [], depth = 0, seen = new WeakSet<object>()): AnyRecord[] {
+  if (depth > MAX_RECURSION_DEPTH || value == null || (!isRecord(value) && !Array.isArray(value))) {
+    return results
+  }
+
+  if (seen.has(value)) {
+    return results
+  }
+  seen.add(value)
+
+  if (Array.isArray(value)) {
+    value.slice(0, 80).forEach((item) => collectPlayerCandidates(item, results, depth + 1, seen))
+    return results
+  }
+
+  if (looksLikePlayerRecord(value)) {
+    results.push(value)
+  }
+
+  Object.values(value).forEach((child) => collectPlayerCandidates(child, results, depth + 1, seen))
+  return results
+}
+
+function scorePlayerCandidate(candidate: AnyRecord, context: {
+  championId: number | null
+  identityCandidates: string[]
+  championName: string
+}): number {
+  let score = 0
+
+  if (readBooleanByKeys(candidate, localPlayerKeys) === true) {
+    score += 100
+  }
+
+  const candidateChampionId = extractChampionId(candidate)
+  if (candidateChampionId && context.championId && candidateChampionId === context.championId) {
+    score += 40
+  }
+
+  const candidateChampionName = normalizeChampionLookupText(extractChampionName(candidate))
+  const contextChampionName = normalizeChampionLookupText(context.championName)
+  if (candidateChampionName && contextChampionName && candidateChampionName === contextChampionName) {
+    score += 30
+  }
+
+  const candidateIdentities = collectIdentityCandidates(candidate)
+  if (candidateIdentities.some((identity) => context.identityCandidates.includes(identity))) {
+    score += 80
+  }
+
+  if (hasAnyStats(extractStats(candidate))) {
+    score += 10
+  }
+
+  return score
+}
+
+function selectPlayerRecord(payload: unknown, context: {
+  championId: number | null
+  identityCandidates: string[]
+  championName: string
+}): AnyRecord | null {
+  const candidates = collectPlayerCandidates(payload)
+  if (!candidates.length) {
+    return null
+  }
+
+  const ranked = candidates
+    .map((candidate) => ({
+      candidate,
+      score: scorePlayerCandidate(candidate, context),
+    }))
+    .sort((left, right) => right.score - left.score)
+
+  if (ranked[0]?.score > 0 || ranked.length === 1) {
+    return ranked[0].candidate
+  }
+
+  return null
+}
+
+function isKnownAugmentValue(value: unknown, augmentBaseById: Record<string, any>): number | null {
+  const augmentId = toPositiveInteger(value)
+  if (!augmentId) {
+    return null
+  }
+
+  return augmentBaseById[String(augmentId)] ? augmentId : null
+}
+
+function collectKnownAugmentIdsFromSubtree(
+  value: unknown,
+  augmentBaseById: Record<string, any>,
+  results: number[],
+  depth = 0,
+  seen = new WeakSet<object>()
+): void {
+  if (depth > 4 || value == null) {
+    return
+  }
+
+  const directId = isKnownAugmentValue(value, augmentBaseById)
+  if (directId && !results.includes(directId)) {
+    results.push(directId)
+    return
+  }
+
+  if (!isRecord(value) && !Array.isArray(value)) {
+    return
+  }
+
+  if (seen.has(value)) {
+    return
+  }
+  seen.add(value)
+
+  if (Array.isArray(value)) {
+    value.slice(0, 20).forEach((item) =>
+      collectKnownAugmentIdsFromSubtree(item, augmentBaseById, results, depth + 1, seen)
+    )
+    return
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    const normalizedKey = normalizeKey(key)
+    if (['id', 'augmentid', 'cardid', 'upgradeid'].includes(normalizedKey)) {
+      const augmentId = isKnownAugmentValue(child, augmentBaseById)
+      if (augmentId && !results.includes(augmentId)) {
+        results.push(augmentId)
+      }
+    }
+
+    collectKnownAugmentIdsFromSubtree(child, augmentBaseById, results, depth + 1, seen)
+  }
+}
+
+function collectKnownAugmentIds(
+  value: unknown,
+  augmentBaseById: Record<string, any>,
+  results: number[] = [],
+  path = '$',
+  depth = 0,
+  seen = new WeakSet<object>()
+): number[] {
+  if (depth > MAX_RECURSION_DEPTH || value == null || (!isRecord(value) && !Array.isArray(value))) {
+    return results
+  }
+
+  if (seen.has(value)) {
+    return results
+  }
+  seen.add(value)
+
+  if (Array.isArray(value)) {
+    value.slice(0, 40).forEach((item, index) =>
+      collectKnownAugmentIds(item, augmentBaseById, results, `${path}[${index}]`, depth + 1, seen)
+    )
+    return results
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    const nextPath = `${path}.${key}`
+    const normalizedKey = normalizeKey(key)
+    const pathLooksAugmentRelated = /augment|upgrade|hextech|hex/.test(normalizedKey)
+
+    if (pathLooksAugmentRelated) {
+      collectKnownAugmentIdsFromSubtree(child, augmentBaseById, results)
+    }
+
+    collectKnownAugmentIds(child, augmentBaseById, results, nextPath, depth + 1, seen)
+  }
+
+  return results
+}
+
+function mergeStats(existing: PostGameShareStatBlock, incoming?: PostGameShareStatBlock): PostGameShareStatBlock {
+  if (!incoming) {
+    return existing
+  }
+
+  return {
+    kills: incoming.kills ?? existing.kills,
+    deaths: incoming.deaths ?? existing.deaths,
+    assists: incoming.assists ?? existing.assists,
+    kda: incoming.kda ?? existing.kda,
+    damageDealtToChampions: incoming.damageDealtToChampions ?? existing.damageDealtToChampions,
+    damageTaken: incoming.damageTaken ?? existing.damageTaken,
+    goldEarned: incoming.goldEarned ?? existing.goldEarned,
+    creepScore: incoming.creepScore ?? existing.creepScore,
+    killParticipation: incoming.killParticipation ?? existing.killParticipation,
+  }
+}
+
+function mergeChampion(existing: SnapshotChampion, incoming?: SnapshotChampion): SnapshotChampion {
+  if (!incoming) {
+    return existing
+  }
+
+  return {
+    id: incoming.id ?? existing.id,
+    name: incoming.name || existing.name,
+    nameEN: incoming.nameEN || existing.nameEN,
+    title: incoming.title || existing.title,
+    imageUrl: incoming.imageUrl || existing.imageUrl,
+  }
+}
+
+function mergeAugments(existing: SnapshotAugment[], incoming: SnapshotAugment[] = []): SnapshotAugment[] {
+  const result: SnapshotAugment[] = []
+  const byKey = new Map<string, SnapshotAugment>()
+
+  for (const augment of [...existing, ...incoming]) {
+    const key = augment.id != null ? `id:${augment.id}` : `name:${augment.name}`
+    const previous = byKey.get(key)
+    const merged = previous
+      ? {
+          ...previous,
+          ...augment,
+          name: augment.name || previous.name,
+          rarity: augment.rarity !== 'unknown' ? augment.rarity : previous.rarity,
+          iconPath: augment.iconPath || previous.iconPath,
+          iconUrl: augment.iconUrl || previous.iconUrl,
+          winRate: augment.winRate ?? previous.winRate,
+          pickRate: augment.pickRate ?? previous.pickRate,
+          recommendScore: augment.recommendScore ?? previous.recommendScore,
+        }
+      : augment
+
+    if (!previous) {
+      result.push(merged)
+    } else {
+      const index = result.findIndex((item) => (item.id != null ? `id:${item.id}` : `name:${item.name}`) === key)
+      if (index >= 0) {
+        result[index] = merged
+      }
+    }
+
+    byKey.set(key, merged)
+  }
+
+  return result.filter((augment) => augment.id != null || augment.name).slice(0, 6)
+}
+
+function mergeSnapshot(update: SnapshotUpdate): void {
+  const sources = new Set([...currentSnapshot.sources, ...(update.sources || [])].filter(Boolean))
+  currentSnapshot = {
+    ...currentSnapshot,
+    ...update,
+    champion: mergeChampion(currentSnapshot.champion, update.champion),
+    stats: mergeStats(currentSnapshot.stats, update.stats),
+    augments: mergeAugments(currentSnapshot.augments, update.augments),
+    identityCandidates: [
+      ...new Set([
+        ...currentSnapshot.identityCandidates,
+        ...(update.identityCandidates || []),
+      ].filter(Boolean)),
+    ],
+    sources: [...sources],
+    updatedAt: Date.now(),
+  }
+}
+
+function getChampionIconUrl(championId: number | null, fallbackUrl = ''): string {
+  if (fallbackUrl && /^https?:\/\//i.test(fallbackUrl)) {
+    return fallbackUrl
+  }
+
+  return championId
+    ? `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/${championId}.png`
+    : ''
+}
+
+function getAugmentIconUrl(iconPath: string): string {
+  if (!iconPath) {
+    return ''
+  }
+
+  if (/^https?:\/\//i.test(iconPath)) {
+    return iconPath
+  }
+
+  const cleanPath = iconPath.toLowerCase().replace(/\\/g, '/')
+  return `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/${cleanPath}`
+}
+
+async function createChampion(championId: number | null, fallbackName = ''): Promise<SnapshotChampion> {
+  if (!championId) {
+    return {
+      id: null,
+      name: fallbackName || '',
+      nameEN: '',
+      title: '',
+      imageUrl: '',
+    }
+  }
+
+  const championName = await loadChampionName(championId)
+  return {
+    id: championId,
+    name: championName?.nameCN || fallbackName || `英雄 ${championId}`,
+    nameEN: championName?.nameEN || '',
+    title: championName?.title || '',
+    imageUrl: getChampionIconUrl(championId, championName?.iconUrl || ''),
+  }
+}
+
+async function decorateAugments(
+  augments: SnapshotAugment[],
+  championId: number | null
+): Promise<SnapshotAugment[]> {
+  if (!augments.length) {
+    return []
+  }
+
+  const [augmentBaseById, championAugmentStats] = await Promise.all([
+    loadAugmentDetail(),
+    championId ? getChampionAugmentStats(championId).catch(() => []) : Promise.resolve([]),
+  ])
+  const statsById = new Map(
+    championAugmentStats.map((augment: AnyRecord) => [
+      Number(augment.augmentId ?? augment.id),
+      augment,
+    ])
+  )
+
+  return augments.map((augment) => {
+    const id = augment.id ?? augment.augmentId
+    const base = id != null ? augmentBaseById[String(id)] || {} : {}
+    const stat = id != null ? statsById.get(Number(id)) || {} : {}
+    const iconPath = augment.iconPath || stat.iconPath || stat.iconUrl || base.iconPath || base.iconUrl || null
+
+    return {
+      ...augment,
+      id: id ?? null,
+      augmentId: id ?? null,
+      name: augment.name || stat.name || base.name || (id ? `海克斯 ${id}` : '未知海克斯'),
+      rarity: augment.rarity !== 'unknown' ? augment.rarity : stat.rarity || base.rarity || 'unknown',
+      iconPath,
+      iconUrl: getAugmentIconUrl(iconPath || ''),
+      winRate: augment.winRate ?? toFiniteNumber(stat.winRate),
+      pickRate: augment.pickRate ?? toFiniteNumber(stat.pickRate),
+      recommendScore: augment.recommendScore ?? toFiniteNumber(stat.recommendScore),
+    }
+  })
+}
+
+async function buildSnapshotUpdateFromPayload(params: {
+  payload: unknown
+  source: string
+  gameflowSession?: unknown
+  currentSummoner?: unknown
+}): Promise<SnapshotUpdate> {
+  const payloadRecord = isRecord(params.payload) ? params.payload : {}
+  const activePlayer = isRecord(payloadRecord.activePlayer) ? payloadRecord.activePlayer : {}
+  const championIdFromSession = getLikelyChampionIdFromGameflowSession(params.gameflowSession)
+  const championIdFromStore = toPositiveInteger(store.get('lastSelectedChampionId'))
+  const activeChampionId = extractChampionId(activePlayer)
+  const activeChampionName = extractChampionName(activePlayer)
+  const summonerIdentityCandidates = collectIdentityCandidates(params.currentSummoner)
+  const activeIdentityCandidates = collectIdentityCandidates(activePlayer)
+  const context = {
+    championId: activeChampionId || championIdFromSession || currentSnapshot.champion.id || championIdFromStore,
+    identityCandidates: [
+      ...new Set([
+        ...currentSnapshot.identityCandidates,
+        ...summonerIdentityCandidates,
+        ...activeIdentityCandidates,
+      ]),
+    ],
+    championName: activeChampionName || currentSnapshot.champion.name || '',
+  }
+  const selectedPlayer = selectPlayerRecord(params.payload, context) || activePlayer
+  const selectedChampionName = extractChampionName(selectedPlayer) || activeChampionName
+  const championId =
+    extractChampionId(selectedPlayer) ||
+    context.championId ||
+    (selectedChampionName ? await resolveChampionIdFromName(selectedChampionName) : null)
+  const champion = await createChampion(championId, selectedChampionName)
+  const augmentBaseById = await loadAugmentDetail()
+  const selectedPlayerAugmentIds = collectKnownAugmentIds(selectedPlayer, augmentBaseById)
+  const activePlayerAugmentIds = selectedPlayer === activePlayer
+    ? []
+    : collectKnownAugmentIds(activePlayer, augmentBaseById)
+  const augmentIds = selectedPlayerAugmentIds.length ? selectedPlayerAugmentIds : activePlayerAugmentIds
+  const liveAugments = await decorateAugments(
+    augmentIds.map((augmentId) => ({
+      id: augmentId,
+      augmentId,
+      name: '',
+      rarity: 'unknown',
+      iconPath: null,
+      iconUrl: '',
+      winRate: null,
+      pickRate: null,
+      recommendScore: null,
+      source: params.source,
+    })),
+    championId
+  )
+  const stats = extractStats(selectedPlayer)
+  const result = readResult(selectedPlayer) !== 'unknown' ? readResult(selectedPlayer) : readResult(params.payload)
+  const gameMode = getStringValue(payloadRecord.gameMode || payloadRecord.gameData?.gameMode) || currentSnapshot.gameMode
+  const queueName = gameMode.toUpperCase().includes('ARAM') ? 'ARAM' : gameMode || currentSnapshot.queueName
+  const summonerName = extractSummonerName(selectedPlayer) || extractSummonerName(activePlayer) || currentSnapshot.summonerName
+  const durationSeconds = extractDurationSeconds(params.payload) ?? currentSnapshot.durationSeconds
+
+  return {
+    result,
+    gameMode,
+    queueName,
+    durationSeconds,
+    summonerName,
+    champion,
+    stats,
+    augments: liveAugments,
+    identityCandidates: context.identityCandidates,
+    sources: [params.source],
+  }
+}
+
+async function fetchImageDataUrl(url: string): Promise<string | null> {
+  if (!/^https?:\/\//i.test(url)) {
+    return null
+  }
+
+  try {
+    const transportFetch = process.versions?.electron ? net.fetch.bind(net) : globalThis.fetch
+    const timeout = new Promise<null>((resolve) => {
+      setTimeout(() => resolve(null), IMAGE_FETCH_TIMEOUT_MS)
+    })
+    const response = await Promise.race([
+      transportFetch(url, { headers: { accept: 'image/*' } }),
+      timeout,
+    ])
+
+    if (!response || !response.ok) {
+      return null
+    }
+
+    const contentType = response.headers.get('content-type') || 'image/png'
+    if (!contentType.toLowerCase().startsWith('image/')) {
+      return null
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer())
+    if (buffer.length > MAX_INLINE_IMAGE_BYTES) {
+      return null
+    }
+
+    return `data:${contentType};base64,${buffer.toString('base64')}`
+  } catch (error) {
+    const err = error as Error
+    logger.debug('[post-game-share] image inline fetch failed:', {
+      url,
+      error: err.message,
+    })
+    return null
+  }
+}
+
+async function hydratePosterImages(data: PostGameSharePosterData): Promise<PostGameSharePosterData> {
+  const [championImageDataUrl, augmentImageDataUrls] = await Promise.all([
+    fetchImageDataUrl(data.champion.imageUrl),
+    Promise.all(data.augments.map((augment) => fetchImageDataUrl(augment.iconUrl))),
+  ])
+
+  return {
+    ...data,
+    champion: {
+      ...data.champion,
+      imageDataUrl: championImageDataUrl,
+    },
+    augments: data.augments.map((augment, index) => ({
+      ...augment,
+      imageDataUrl: augmentImageDataUrls[index] || null,
+    })),
+  }
+}
+
+function getPosterStatus(snapshot: PostGameShareSnapshot): PostGameSharePosterData['status'] {
+  const hasChampion = Boolean(snapshot.champion.id || snapshot.champion.name)
+  const hasKda = snapshot.stats.kills != null && snapshot.stats.deaths != null && snapshot.stats.assists != null
+  const hasAugments = snapshot.augments.length > 0
+
+  if (hasChampion && hasKda && hasAugments) {
+    return 'ready'
+  }
+
+  if (hasChampion || hasKda || hasAugments) {
+    return 'partial'
+  }
+
+  return 'unavailable'
+}
+
+async function buildPosterData(reason: string, hydrateImages: boolean): Promise<PostGameSharePosterData> {
+  const decoratedAugments = await decorateAugments(currentSnapshot.augments, currentSnapshot.champion.id)
+  currentSnapshot = {
+    ...currentSnapshot,
+    augments: decoratedAugments,
+    updatedAt: Date.now(),
+  }
+
+  const data: PostGameSharePosterData = {
+    status: getPosterStatus(currentSnapshot),
+    reason,
+    result: currentSnapshot.result,
+    gameMode: currentSnapshot.gameMode,
+    queueName: currentSnapshot.queueName,
+    durationSeconds: currentSnapshot.durationSeconds,
+    summonerName: currentSnapshot.summonerName,
+    champion: {
+      ...currentSnapshot.champion,
+      imageDataUrl: null,
+    },
+    stats: currentSnapshot.stats,
+    augments: currentSnapshot.augments.map((augment) => ({
+      ...augment,
+      imageDataUrl: null,
+    })),
+    sources: currentSnapshot.sources,
+    updatedAt: currentSnapshot.updatedAt,
+  }
+
+  return hydrateImages ? hydratePosterImages(data) : data
+}
+
+export function resetPostGameShareSnapshot(reason: string): void {
+  currentSnapshot = createEmptySnapshot(reason)
+  latestPosterData = null
+  liveSnapshotAt = 0
+  logger.debug('[post-game-share] snapshot reset', { reason })
+}
+
+export async function capturePostGameShareSnapshot(
+  lcuService: LCUService,
+  reason: string,
+  options: { force?: boolean } = {}
+): Promise<PostGameShareSnapshot> {
+  const now = Date.now()
+  if (!options.force && now - liveSnapshotAt < LIVE_SNAPSHOT_THROTTLE_MS) {
+    return currentSnapshot
+  }
+
+  liveSnapshotAt = now
+
+  try {
+    const [liveClientData, gameflowSession, currentSummoner] = await Promise.all([
+      lcuService.getLiveClientAllGameData(),
+      lcuService.getReadOnlyJsonEndpoint('/lol-gameflow/v1/session'),
+      lcuService.getCurrentSummoner(),
+    ])
+
+    if (liveClientData?.data) {
+      const update = await buildSnapshotUpdateFromPayload({
+        payload: liveClientData.data,
+        source: `liveclientdata:${reason}`,
+        gameflowSession: gameflowSession?.data,
+        currentSummoner,
+      })
+      mergeSnapshot(update)
+    } else if (gameflowSession?.data) {
+      const championId = getLikelyChampionIdFromGameflowSession(gameflowSession.data)
+      if (championId) {
+        mergeSnapshot({
+          champion: await createChampion(championId, currentSnapshot.champion.name),
+          sources: [`gameflow-session:${reason}`],
+        })
+      }
+    }
+  } catch (error) {
+    const err = error as Error
+    logger.debug('[post-game-share] live snapshot failed:', {
+      reason,
+      error: err.message,
+    })
+  }
+
+  return currentSnapshot
+}
+
+async function captureEndOfGameStats(lcuService: LCUService, reason: string): Promise<void> {
+  const endpoints = [
+    '/lol-end-of-game/v1/eog-stats-block',
+    '/lol-end-of-game/v1/gameclient-eog-stats-block',
+  ]
+
+  for (const endpoint of endpoints) {
+    const result = await lcuService.getReadOnlyJsonEndpoint(endpoint)
+    if (!result || result.status < 200 || result.status >= 300 || !result.data) {
+      continue
+    }
+
+    const update = await buildSnapshotUpdateFromPayload({
+      payload: result.data,
+      source: `eog:${endpoint}:${reason}`,
+    })
+    mergeSnapshot(update)
+
+    if (hasAnyStats(update.stats || createEmptyStats())) {
+      return
+    }
+  }
+}
+
+export async function preparePostGameSharePosterData(
+  lcuService: LCUService,
+  reason: string
+): Promise<{ success: boolean; data: PostGameSharePosterData; error?: string }> {
+  if (preparePosterPromise) {
+    return preparePosterPromise
+  }
+
+  preparePosterPromise = (async () => {
+    try {
+      await capturePostGameShareSnapshot(lcuService, reason, { force: true })
+      await captureEndOfGameStats(lcuService, reason)
+      latestPosterData = await buildPosterData(reason, true)
+      logger.info('[post-game-share] poster data prepared', {
+        status: latestPosterData.status,
+        championId: latestPosterData.champion.id,
+        augmentIds: latestPosterData.augments.map((augment) => augment.id),
+        sources: latestPosterData.sources,
+      })
+      return {
+        success: true,
+        data: latestPosterData,
+      }
+    } catch (error) {
+      const err = error as Error
+      logger.warn('[post-game-share] poster data preparation failed:', err.message)
+      const fallback = await buildPosterData(reason, false)
+      latestPosterData = fallback
+      return {
+        success: false,
+        data: fallback,
+        error: err.message,
+      }
+    } finally {
+      preparePosterPromise = null
+    }
+  })()
+
+  return preparePosterPromise
+}
+
+export async function getLatestPostGameSharePosterData(
+  lcuService: LCUService,
+  reason = 'manual'
+): Promise<{ success: boolean; data: PostGameSharePosterData; error?: string }> {
+  if (latestPosterData && latestPosterData.status !== 'unavailable') {
+    return {
+      success: true,
+      data: latestPosterData,
+    }
+  }
+
+  return preparePostGameSharePosterData(lcuService, reason)
+}
+
+export async function createMockPostGameSharePosterData(): Promise<{
+  success: boolean
+  data: PostGameSharePosterData
+  error?: string
+}> {
+  try {
+    const championRoster = await loadChampionRoster().catch(() => [])
+    const randomChampion = championRoster.length
+      ? championRoster[Math.floor(Math.random() * championRoster.length)]
+      : null
+    const championId = toPositiveInteger(randomChampion?.championId ?? randomChampion?.id) || 63
+    const fallbackChampionName = getStringValue(randomChampion?.nameCN || randomChampion?.name) || '布兰德'
+    const champion = await createChampion(championId, fallbackChampionName)
+    const augmentStats = await getChampionAugmentStats(championId).catch(() => [])
+    const augmentBaseById = await loadAugmentDetail()
+    const fallbackAugments = Object.values(augmentBaseById)
+    const seenAugmentKeys = new Set<string>()
+    const augmentPool = [...augmentStats, ...fallbackAugments].filter((augment): augment is AnyRecord => {
+      if (!isRecord(augment)) {
+        return false
+      }
+
+      const id = toPositiveInteger(augment.augmentId ?? augment.id)
+      const name = getStringValue(augment.name)
+      const key = id ? `id:${id}` : `name:${name}`
+      if (!id && !name) {
+        return false
+      }
+
+      if (seenAugmentKeys.has(key)) {
+        return false
+      }
+
+      seenAugmentKeys.add(key)
+      return true
+    })
+    const shuffledAugments = [...augmentPool].sort(() => Math.random() - 0.5)
+    const mockAugmentCount = 3 + (mockAugmentCountCursor % 4)
+    mockAugmentCountCursor += 1
+    const rawAugments: AnyRecord[] = shuffledAugments.slice(0, mockAugmentCount)
+    const fallbackRarities = ['kSilver', 'kGold', 'kPrismatic']
+    while (rawAugments.length < mockAugmentCount) {
+      const index = rawAugments.length
+      rawAugments.push({
+        id: 9000 + index,
+        name: `模拟海克斯 ${index + 1}`,
+        rarity: fallbackRarities[index % fallbackRarities.length],
+        iconPath: null,
+      })
+    }
+    const kills = 14 + Math.floor(Math.random() * 10)
+    const deaths = 2 + Math.floor(Math.random() * 5)
+    const assists = 20 + Math.floor(Math.random() * 16)
+    const damageDealtToChampions = 46000 + Math.floor(Math.random() * 18000)
+    const damageTaken = 26000 + Math.floor(Math.random() * 14000)
+    const goldEarned = 14500 + Math.floor(Math.random() * 4200)
+    const kda = Number(((kills + assists) / Math.max(1, deaths)).toFixed(2))
+
+    const augments = await decorateAugments(
+      rawAugments.map((augment: AnyRecord, index: number) => {
+        const id = toPositiveInteger(augment.augmentId ?? augment.id) || 9000 + index
+        const iconPath = getStringValue(augment.iconPath || augment.iconUrl) || null
+        return {
+          id,
+          augmentId: id,
+          name: getStringValue(augment.name) || `海克斯 ${index + 1}`,
+          rarity: getStringValue(augment.rarity) || 'unknown',
+          iconPath,
+          iconUrl: getAugmentIconUrl(iconPath || ''),
+          winRate: toFiniteNumber(augment.winRate) ?? 0.538 + index * 0.012,
+          pickRate: toFiniteNumber(augment.pickRate) ?? 0.18 - index * 0.03,
+          recommendScore: toFiniteNumber(augment.recommendScore) ?? 88 - index * 4,
+          source: 'mock',
+        }
+      }),
+      championId
+    )
+
+    currentSnapshot = {
+      result: 'victory',
+      gameMode: 'ARAM',
+      queueName: 'ARAM',
+      durationSeconds: 1128,
+      summonerName: 'ARAMGG玩家',
+      champion,
+      stats: {
+        kills,
+        deaths,
+        assists,
+        kda,
+        damageDealtToChampions,
+        damageTaken,
+        goldEarned,
+        creepScore: 58 + Math.floor(Math.random() * 38),
+        killParticipation: 0.72 + Math.random() * 0.22,
+      },
+      augments,
+      identityCandidates: [],
+      sources: ['mock'],
+      updatedAt: Date.now(),
+    }
+
+    latestPosterData = await hydratePosterImages(await buildPosterData('mock', false))
+    return {
+      success: true,
+      data: latestPosterData,
+    }
+  } catch (error) {
+    const err = error as Error
+    logger.warn('[post-game-share] mock poster generation failed:', err.message)
+    const fallback = await buildPosterData('mock-fallback', false)
+    latestPosterData = fallback
+    return {
+      success: false,
+      data: fallback,
+      error: err.message,
+    }
+  }
+}

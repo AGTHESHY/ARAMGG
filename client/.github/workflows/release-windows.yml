@@ -1,0 +1,173 @@
+name: Build Windows Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-windows-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      ARAMGG_DISTRIBUTION_CHANNEL: official
+      ARAMGG_MATCH_HISTORY_UPLOAD_ORIGIN: https://aramgg.com
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+          cache: npm
+
+      - name: Print tool versions
+        run: |
+          node --version
+          npm --version
+
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $packageVersion = node -p "require('./package.json').version"
+          $expectedTag = "v$packageVersion"
+          if ($env:GITHUB_REF_NAME -ne $expectedTag) {
+            Write-Error "Release tag '$env:GITHUB_REF_NAME' does not match package.json version '$packageVersion'. Expected '$expectedTag'."
+            exit 1
+          }
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Package Windows installer
+        shell: pwsh
+        run: |
+          $env:ELECTRON_CACHE = Join-Path $env:RUNNER_TEMP 'electron-cache'
+          $env:ELECTRON_BUILDER_CACHE = Join-Path $env:RUNNER_TEMP 'electron-builder-cache'
+          npm run pack
+
+          $localeBundles = @(
+            @{ Locale = 'zh-CN'; Pointer = 'current.json'; VersionPrefix = 'versions' },
+            @{ Locale = 'en-US'; Pointer = 'current.en-US.json'; VersionPrefix = 'versions/en-US' },
+            @{ Locale = 'zh-TW'; Pointer = 'current.zh-TW.json'; VersionPrefix = 'versions/zh-TW' }
+          )
+
+          foreach ($bundle in $localeBundles) {
+            $clientDataCurrent = Join-Path $PWD "build/win-unpacked/resources/client-data/$($bundle.Pointer)"
+            if (!(Test-Path $clientDataCurrent)) {
+              Write-Error "Packaged client-data pointer was not found: $clientDataCurrent"
+              exit 1
+            }
+
+            $clientData = Get-Content $clientDataCurrent -Raw | ConvertFrom-Json
+            if ($clientData.locale -ne $bundle.Locale) {
+              Write-Error "Packaged client-data locale mismatch in $($bundle.Pointer): expected $($bundle.Locale), got $($clientData.locale)"
+              exit 1
+            }
+
+            $versionDir = Join-Path $PWD "build/win-unpacked/resources/client-data/$($bundle.VersionPrefix)/$($clientData.dataVersion)"
+            $requiredFiles = @('manifest.json', 'augments.json', 'champions.json', 'items.json', 'champion-shards/index.json')
+            foreach ($requiredFile in $requiredFiles) {
+              $requiredPath = Join-Path $versionDir $requiredFile
+              if (!(Test-Path $requiredPath)) {
+                Write-Error "Packaged $($bundle.Locale) client-data file was not found: $requiredPath"
+                exit 1
+              }
+            }
+
+            $shardDir = Join-Path $versionDir 'champion-shards'
+            $shardCount = @(Get-ChildItem $shardDir -Filter '*.json' -File | Where-Object { $_.Name -ne 'index.json' }).Count
+            Write-Host "Packaged client-data locale=$($bundle.Locale) dataVersion=$($clientData.dataVersion) gamePatch=$($clientData.gamePatch) files=$($clientData.bundledFileCount) shards=$shardCount bytes=$($clientData.bundledBytes)"
+
+            if ($shardCount -lt 40) {
+              Write-Error "Packaged $($bundle.Locale) client-data shard count is too low: $shardCount"
+              exit 1
+            }
+          }
+
+      - name: Smoke test packaged Windows application
+        timeout-minutes: 4
+        run: npm run test:packaged-windows
+
+      - name: Upload packaged smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aramgg-client-window-smoke
+          if-no-files-found: warn
+          path: build/release-smoke/
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aramgg-client-windows
+          if-no-files-found: error
+          path: |
+            build/*.exe
+            build/*.exe.blockmap
+            build/latest.yml
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $assets = @(
+            Get-ChildItem -Path build -Filter '*.exe' -File
+            Get-ChildItem -Path build -Filter '*.exe.blockmap' -File
+            Get-Item -Path build/latest.yml
+          )
+
+          if ($assets.Count -lt 3) {
+            Write-Error "Expected release assets were not found in build/"
+            exit 1
+          }
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            $notes = @(
+              'Windows installer generated by GitHub Actions.'
+              ''
+              'Assets:'
+              '- `aramgg_client Setup *.exe`'
+              '- `aramgg_client Setup *.exe.blockmap`'
+              '- `latest.yml`'
+            ) -join [Environment]::NewLine
+            gh release create $tag --title $tag --notes $notes
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+          }
+
+          foreach ($asset in $assets) {
+            gh release upload $tag $asset.FullName --clobber
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+          }

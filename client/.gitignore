@@ -1,0 +1,47 @@
+.DS_Store
+node_modules
+/dist
+/dist-electron
+/build
+/resources/client-data
+/.runtime
+/.codex-tmp
+/.codex-update-test
+
+# Local Trellis workflow
+/.trellis/
+/.codex/
+/.agents/
+
+# Local CodeGraph index
+/.codegraph/
+
+# local env files
+.env
+.env.*
+!.env.local.example
+.env.local
+.env.*.local
+
+# Local agent and IDE state
+/.claude
+/.serena
+*.iml
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local archives and backups
+*.zip
+*.bak
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
