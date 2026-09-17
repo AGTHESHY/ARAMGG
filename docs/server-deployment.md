@@ -18,7 +18,7 @@ docker compose -f compose.server.yaml up -d --build api
 docker compose -f compose.server.yaml ps
 ```
 
-服务器 `.env` 保存随机生成的数据库密码，权限 `0600`。Owner Key 保存在 `secrets/aramgg_owner_key`，由服务器私密目录保护，并以只读 secret 文件挂载给 `probe`。**公开 API 容器不挂载 Key。** 不要提交这两个文件，也不要把真实 Key 放入命令行参数。
+服务器 `.env` 保存随机生成的数据库密码，权限 `0600`。多个 Owner Key 逐行保存在 `secrets/aramgg_owner_key`；共享 Key 的 32 字节主加密密钥以 Base64 保存在 `secrets/key_encryption_key`。这些文件只以只读 secret 挂载，绝不提交仓库或写入日志。
 
 ## 通过 SSH 隧道测试
 
@@ -64,7 +64,7 @@ docker compose -f compose.server.yaml --profile tools run --rm sync
 
 只有所有英雄详情下载完成、语言和版本保持一致、英雄分片覆盖完整、引用及 hash 校验全部通过后，才发布不可变快照并切换 `current`。额度不足时状态保持 `downloading`，客户端 config 继续返回 503，不会接触半成品。
 
-测试服务器安装 `aramgg-central-sync.timer`，每 15 分钟检查一次公开版本。版本一致且中央缓存完整时不会发起付费请求；版本不一致或下载尚未完成时，复用已有文件并继续下载。单个 Key 当日额度不足时，下次额度刷新后自动继续。将来共享 Key Pool 接入后，同一任务会轮换使用明确 opt-in 的 Key。
+测试服务器安装 `aramgg-central-sync.timer`，每 15 分钟检查一次公开版本。版本一致且中央缓存完整时不会发起付费请求；版本不一致或下载尚未完成时，复用已有文件并继续下载。同步按文件中的 Owner Key 顺序轮换，随后使用明确 opt-in 的共享 Key；每个共享 Key 独立执行每日贡献上限。
 
 ## 客户端、中央快照与 Key 的边界
 
@@ -76,11 +76,11 @@ docker compose -f compose.server.yaml --profile tools run --rm sync
 4. 新版未完成或所有 Key 不可用时，中央继续提供上一份完整快照，不把半成品切成 `current`。
 5. 只有客户端没有本地完整快照，且中央也没有任何可用完整快照时，客户端才显示数据获取失败。
 
-Owner Key 永远只保存在服务器，不进入 EXE、客户端配置或日志。用户填写 Key 但没有开启共享时，Key 只保留在本机，不上传服务器，也不参与公共快照同步。开启共享后，客户端通过 HTTPS 提交给服务器加密保存；Key Pool 还需要实现用户认证、AES-256-GCM/KMS、每日贡献上限、撤销、轮换和审计后才能启用。
+Owner Key 永远只保存在服务器，不进入 EXE、客户端配置或日志。用户填写 Key 但没有开启共享时，Key 使用 Electron 系统安全存储加密后留在本机，不上传服务器，也不参与公共快照同步。服务端已实现注册登录、AES-256-GCM 加密、默认关闭共享、每日贡献上限、撤销和轮换；客户端共享上传必须等 HTTPS 入口启用后才开放。
 
 ## 当前功能边界
 
-已部署的服务提供快照读取、校验、发布及回滚底座；真实数据的全量转换、断点续传和定时同步尚未完成。
+服务已具备真实数据全量转换、逐文件断点续传、定时同步、不可变快照发布及回滚；不完整版本不会成为中央 `current`。
 
 完整单语言首次同步预计需要 `3 + 2 × 英雄数量` credits。Key 的 200 credits/日不足以在同一天完成当前完整英雄池，需要实现跨日缓存续传，或获得足够的上游配额。不能绕过 Developer API 使用官方客户端接口来规避额度。
 
@@ -106,6 +106,6 @@ docker compose -f compose.server.yaml start
 - 首次测试请求消耗 5 credits，剩余 195；完整单语言首次同步预计 349 credits。
 - 相同版本复测复用本地缓存，新增消耗 0 credits，剩余仍为 195。
 - 最终两个服务均 healthy；API 约占 24 MiB、PostgreSQL 约占 44 MiB，服务器可用内存约 635 MiB。
-- 正式简体中文缓存任务已启动：版本 `16.18.2` 共 173 个英雄，首轮完成 98 个英雄详情，剩余 75 个；当日共使用 199/200 credits。中央状态保持 `downloading`，没有发布半成品。
-- `aramgg-central-sync.timer` 已启用，每 15 分钟检查版本；额度刷新后会从第 99 个英雄继续，完成后自动生成分片并发布中央 `current`。
-- 本地 Docker 测试共 9 项全部通过，包括真实 PostgreSQL 并发测试以及模拟上游的额度 / 缓存 / 错误处理测试。
+- 正式简体中文缓存已完成：版本 `16.18.2` 共 173 个英雄，第二个 Owner Key 复用首轮 98 个详情后补齐剩余 75 个；中央 `current` 已发布，API 返回 `dataReady: true`。
+- `aramgg-central-sync.timer` 已启用，每 15 分钟检查版本；相同版本完整缓存不会重复下载或扣费。
+- 第二个 Owner Key 已加入服务器轮换，继续复用首轮 98 个英雄详情的缓存。

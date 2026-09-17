@@ -66,6 +66,11 @@ const electronAPI: ElectronAPI = {
     set: (key, value) => ipcRenderer.invoke('store-set', key, value),
     delete: (key) => ipcRenderer.invoke('store-delete', key),
   },
+  developerKey: {
+    getStatus: () => ipcRenderer.invoke('developer-key-status'),
+    save: (key) => ipcRenderer.invoke('developer-key-save', key),
+    delete: () => ipcRenderer.invoke('developer-key-delete'),
+  },
   windows: {
     ready: () => ipcRenderer.send('renderer-ready'),
     showPopup: (data) => ipcRenderer.send('show-popup', data),

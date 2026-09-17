@@ -42,6 +42,8 @@ services:
       NODE_OPTIONS: --max-old-space-size=80
       DATABASE_URL: postgres://mayhem:${POSTGRES_PASSWORD}@postgres:5432/mayhem
       DATA_DIR: /app/data
+      KEY_ENCRYPTION_KEY_FILE: /run/secrets/key_encryption_key
+    secrets: [key_encryption_key]
     ports:
       - "127.0.0.1:${MAYHEM_PORT:-8788}:8788"
     volumes:
@@ -95,8 +97,9 @@ services:
       SYNC_CREDIT_LIMIT: ${SYNC_CREDIT_LIMIT:-200}
       DATABASE_URL: postgres://mayhem:${POSTGRES_PASSWORD}@postgres:5432/mayhem
       DATA_DIR: /app/data
+      KEY_ENCRYPTION_KEY_FILE: /run/secrets/key_encryption_key
       NODE_OPTIONS: --max-old-space-size=112
-    secrets: [aramgg_owner_key]
+    secrets: [aramgg_owner_key, key_encryption_key]
     volumes:
       - snapshot-data:/app/data
     depends_on:
@@ -108,6 +111,8 @@ services:
 secrets:
   aramgg_owner_key:
     file: ./secrets/aramgg_owner_key
+  key_encryption_key:
+    file: ./secrets/key_encryption_key
 volumes:
   postgres-data:
   snapshot-data:

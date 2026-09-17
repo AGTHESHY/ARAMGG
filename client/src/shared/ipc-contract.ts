@@ -373,6 +373,11 @@ export interface ElectronAPI {
     set<T = unknown>(key: AppStoreKey, value: T): Promise<void>
     delete(key: AppStoreKey): Promise<void>
   }
+  developerKey: {
+    getStatus(): Promise<{ configured: boolean; usable: boolean }>
+    save(key: string): Promise<{ configured: boolean; usable: boolean }>
+    delete(): Promise<{ configured: boolean; usable: boolean }>
+  }
   windows: {
     ready(): void
     showPopup(data: OverlayPayload): void

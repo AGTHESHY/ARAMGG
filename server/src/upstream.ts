@@ -127,6 +127,8 @@ export class AramggDeveloperApi {
     const augmentsEnvelope = await this.resource('augments.json', config.dataVersion, 1)
     const itemsEnvelope = await this.resource('items.json', config.dataVersion, 1)
     const champions = z.array(rowSchema).min(1).parse(championsEnvelope.data)
+    const items = z.array(rowSchema).min(1).parse(itemsEnvelope.data).filter(item => item.name.trim().length > 0)
+    if (items.length === 0) throw new UpstreamError('UPSTREAM_ITEMS_EMPTY')
     const details = new Map<number, unknown>()
     let stoppedByCreditLimit = false
     for (const champion of champions) {
@@ -158,7 +160,7 @@ export class AramggDeveloperApi {
     const files: Record<string, unknown> = {
       'champions.json': { meta: championsEnvelope.meta, champions: championsEnvelope.data },
       'augments.json': { meta: augmentsEnvelope.meta, augments: augmentsEnvelope.data },
-      'items.json': { meta: itemsEnvelope.meta, items: itemsEnvelope.data },
+      'items.json': { meta: itemsEnvelope.meta, items },
     }
     const shards = []
     for (let offset = 0; offset < champions.length; offset += 20) {

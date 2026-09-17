@@ -18,6 +18,11 @@ export const electronAPI: ElectronAPI = {
     set: (...args) => requireElectronAPI().store.set(...args),
     delete: (...args) => requireElectronAPI().store.delete(...args),
   },
+  developerKey: {
+    getStatus: (...args) => requireElectronAPI().developerKey.getStatus(...args),
+    save: (...args) => requireElectronAPI().developerKey.save(...args),
+    delete: (...args) => requireElectronAPI().developerKey.delete(...args),
+  },
   windows: {
     ready: () => requireElectronAPI().windows.ready(),
     showPopup: (...args) => requireElectronAPI().windows.showPopup(...args),

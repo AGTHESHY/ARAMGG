@@ -2,17 +2,35 @@ import Fastify from 'fastify'
 import { ZodError } from 'zod'
 import { localeSchema, type Locale } from './schema.js'
 import { Snapshots } from './snapshots.js'
+import { AccountError, type AccountService } from './accounts.js'
 
-export function buildApp(snapshots: Snapshots, logging = false) {
+export function buildApp(snapshots: Snapshots, logging = false, accounts?: AccountService) {
   const app = Fastify({
     logger: logging ? { redact: ['req.headers.authorization', 'req.headers["x-api-key"]', 'req.headers.cookie'], level: 'info' } : false,
     disableRequestLogging: true,
   })
   app.setErrorHandler((error, request, reply) => {
+    if (error instanceof AccountError) return reply.code(error.statusCode).send({ error: error.code })
     if (error instanceof ZodError) return reply.code(400).send({ error: 'Invalid request' })
     request.log.error({ requestId: request.id }, 'Request failed')
     return reply.code(500).send({ error: 'Internal server error' })
   })
+  if (accounts) {
+    app.post<{ Body: { email?: unknown; password?: unknown } }>('/api/account/v1/register', async (request, reply) =>
+      reply.code(201).send(await accounts.register(request.body?.email, request.body?.password)))
+    app.post<{ Body: { email?: unknown; password?: unknown } }>('/api/account/v1/login', async request =>
+      accounts.login(request.body?.email, request.body?.password))
+    app.get('/api/account/v1/shared-key', async request =>
+      accounts.keyStatus(await accounts.authenticate(request.headers.authorization)))
+    app.put<{ Body: { apiKey?: unknown; shareEnabled?: unknown; dailyShareLimit?: unknown } }>('/api/account/v1/shared-key', async request => {
+      const userId = await accounts.authenticate(request.headers.authorization)
+      return accounts.setSharedKey(userId, request.body?.apiKey, request.body?.shareEnabled, request.body?.dailyShareLimit)
+    })
+    app.delete('/api/account/v1/shared-key', async (request, reply) => {
+      await accounts.revokeKey(await accounts.authenticate(request.headers.authorization))
+      return reply.code(204).send()
+    })
+  }
   app.get('/health/live', async () => ({ status: 'ok' }))
   app.get('/health/ready', async (_request, reply) => {
     try {
