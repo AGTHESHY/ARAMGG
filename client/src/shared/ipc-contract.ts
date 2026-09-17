@@ -12,21 +12,6 @@ export type AppStoreKey =
 
 export type SupportedDataLocale = 'zh-CN' | 'zh-TW' | 'en-US'
 
-export type FeedbackCategory = 'suggestion' | 'question' | 'bug' | 'other'
-
-export interface FeedbackSubmissionPayload {
-  category: FeedbackCategory
-  message: string
-  contact?: string
-  locale: SupportedDataLocale
-  image?: Uint8Array
-}
-
-export interface FeedbackSubmissionResult extends OperationResult {
-  id?: string
-  logsIncluded?: number
-}
-
 export type GameflowPhase =
   | 'None'
   | 'Lobby'
@@ -429,9 +414,6 @@ export interface ElectronAPI {
   matchHistory: {
     getLocalSummary(): Promise<LocalMatchHistorySummaryResult>
     queryCurrent(payload?: HextechAramMatchHistoryQuery): Promise<HextechAramMatchHistoryQueryResult>
-  }
-  feedback: {
-    submit(payload: FeedbackSubmissionPayload): Promise<FeedbackSubmissionResult>
   }
   lcu: {
     getChampionMonitorState(): Promise<ChampionMonitorState>

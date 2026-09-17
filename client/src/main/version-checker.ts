@@ -91,10 +91,19 @@ function getSeverityText(severity: VersionSeverity): string {
 }
 
 export async function getVersionInfo() {
-  const [config, activeData] = await Promise.all([
-    loadDataApiConfig(),
+  // The status card is a control-plane view: it should show the version currently
+  // published by the central service, even while the local-first data loader is
+  // finishing a safe background download of that version.
+  const [configResult, activeDataResult] = await Promise.allSettled([
+    loadDataApiConfig({ force: true, ttlMs: 0 }),
     getActiveDataStatus(),
   ])
+  const config = configResult.status === 'fulfilled' ? configResult.value : null
+  const activeData = activeDataResult.status === 'fulfilled' ? activeDataResult.value : null
+
+  if (!config && !activeData) {
+    throw new Error('Unable to read the central or local data version')
+  }
   const currentVersion = app.getVersion()
   const clientConfig = config?.client || config?.electron || {}
   const latestVersion = clientConfig.latestVersion || ''
@@ -112,11 +121,11 @@ export async function getVersionInfo() {
     autoUpdateEnabled: clientConfig.autoUpdateEnabled === true,
     updateFeedUrl: clientConfig.updateFeedUrl || '',
     minimumVersion,
-    dataVersion: activeData?.dataVersion || config?.dataVersion || '',
-    locale: activeData?.locale || config?.locale || '',
-    gamePatch: activeData?.gamePatch || config?.gamePatch || '',
+    dataVersion: config?.dataVersion || activeData?.dataVersion || '',
+    locale: config?.locale || activeData?.locale || '',
+    gamePatch: config?.gamePatch || activeData?.gamePatch || '',
     apiRelease: config?.apiRelease ?? null,
-    generatedAt: activeData?.generatedAt || config?.generatedAt || '',
+    generatedAt: config?.generatedAt || activeData?.generatedAt || '',
     publishedAt: config?.publishedAt || '',
     severity: comparison.severity,
     shouldPrompt,

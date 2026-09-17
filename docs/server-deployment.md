@@ -7,7 +7,7 @@
 - `api`：Fastify，内存上限 128 MiB，Node 堆上限 80 MiB。
 - `postgres`：PostgreSQL 16，内存上限 160 MiB，shared_buffers 32 MiB。
 - `probe`：手动运行的上游接口测试，不是常驻同步进程；内存上限 128 MiB。
-- API 只绑定服务器 `127.0.0.1:8788`；数据库不映射端口。
+- API 默认公开监听服务器 `8788` 端口，供桌面客户端读取中央数据版本；数据库不映射端口。
 - 常驻容器设置自动重启和日志轮转，不自动清理数据卷。
 
 部署文件是根目录 `compose.server.yaml`，与本地开发的 `compose.yaml` 分开使用。
@@ -22,7 +22,7 @@ docker compose -f compose.server.yaml ps
 
 ## 通过 SSH 隧道测试
 
-没有配置 HTTPS 域名前，使用 SSH 隧道连接。这里用本机 8789，避免与本地开发服务的 8788 冲突：
+如需限制为仅服务器本机访问，可在 `.env` 中设置 `MAYHEM_BIND_ADDRESS=127.0.0.1`，再使用 SSH 隧道连接。这里用本机 8789，避免与本地开发服务的 8788 冲突：
 
 ```sh
 ssh -N -L 127.0.0.1:8789:127.0.0.1:8788 mca-test

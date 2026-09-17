@@ -282,12 +282,7 @@
                         {{ DATA_API_LABEL }}
                     </a>
                 </p>
-                <p class="footer-feedback">
-                    {{ t('display.feedback') }}
-                    <button class="footer-link footer-action" type="button" @click="openFeedbackWidget">
-                        {{ t('feedback.button') }}
-                    </button>
-                    <span class="footer-separator">·</span>
+                <p class="footer-meta">
                     <a class="footer-link" :href="GITHUB_URL" @click.prevent="openGithub">
                         GitHub
                     </a>
@@ -367,7 +362,7 @@
             />
 
             <button
-                v-if="shouldShowPostGameFloatingShare && !feedbackOpen"
+                v-if="shouldShowPostGameFloatingShare"
                 class="post-game-floating-share"
                 type="button"
                 :title="t('display.shareReport')"
@@ -378,10 +373,6 @@
                 <span>{{ postGameShareFloatingLabel }}</span>
             </button>
 
-            <FeedbackWidget
-                ref="feedbackWidget"
-                @open-change="feedbackOpen = $event"
-            />
         </section>
     </div>
 </template>
@@ -392,7 +383,6 @@ import ItemSetInstaller from './ItemSetInstaller.vue'
 import OverlayPreferences from './OverlayPreferences.vue'
 import ChampionMonitor from './ChampionMonitor.vue'
 import MatchHistoryPanel from './MatchHistoryPanel.vue'
-import FeedbackWidget from './FeedbackWidget.vue'
 import PostGameShareModal from './PostGameShareModal.vue'
 import {
     Select,
@@ -431,8 +421,6 @@ const { t } = useI18n()
 const versionInfo = ref(null)
 const showQuitConfirm = ref(false)
 const showChangelog = ref(false)
-const feedbackWidget = ref(null)
-const feedbackOpen = ref(false)
 const showAdvancedLcuConfig = ref(false)
 const manualLolPath = ref('')
 const manualPathStatus = ref(null)
@@ -783,10 +771,6 @@ const openDataApi = async () => {
     } catch (error) {
         console.warn('Failed to open data API:', error)
     }
-}
-
-const openFeedbackWidget = () => {
-    feedbackWidget.value?.open()
 }
 
 const openGithub = async () => {
@@ -2012,7 +1996,7 @@ onBeforeUnmount(() => {
     white-space: nowrap;
 }
 
-.hex-footer .footer-feedback {
+.hex-footer .footer-meta {
     margin-top: 6px;
 }
 

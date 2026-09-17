@@ -45,7 +45,6 @@ import {
 import { getAramBenchRecommendation } from '../services/aram/bench-recommendation.ts'
 import { registerPreferencesIpcHandlers } from '../ipc/preferences-handlers.ts'
 import { registerSystemIpcHandlers } from '../ipc/system-handlers.ts'
-import { registerFeedbackIpcHandlers } from '../ipc/feedback-handlers.ts'
 import { trustedIpcMain as ipcMain } from '../security/trusted-ipc.ts'
 import { shouldRaiseOverlayWindow } from './overlay-window-state.ts'
 import { deleteDeveloperKey, getDeveloperKeyStatus, saveDeveloperKey } from '../services/developer-key-service.ts'
@@ -360,7 +359,6 @@ async function buildRandomBenchRecommendation(currentChampionId: number | null =
 export function registerIpcHandlers(isDev: boolean): void {
     registerPreferencesIpcHandlers()
     registerSystemIpcHandlers()
-    registerFeedbackIpcHandlers()
     ipcMain.handle('developer-key-status', () => getDeveloperKeyStatus())
     ipcMain.handle('developer-key-save', (_event, key) => saveDeveloperKey(key))
     ipcMain.handle('developer-key-delete', () => deleteDeveloperKey())

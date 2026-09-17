@@ -45,7 +45,7 @@ services:
       KEY_ENCRYPTION_KEY_FILE: /run/secrets/key_encryption_key
     secrets: [key_encryption_key]
     ports:
-      - "127.0.0.1:${MAYHEM_PORT:-8788}:8788"
+      - "${MAYHEM_BIND_ADDRESS:-0.0.0.0}:${MAYHEM_PORT:-8788}:8788"
     volumes:
       - snapshot-data:/app/data
     depends_on:
