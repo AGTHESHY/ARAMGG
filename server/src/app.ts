@@ -21,6 +21,11 @@ export function buildApp(snapshots: Snapshots, logging = false) {
       return { status: 'ok', dataReady: !!current, dataVersion: current?.dataVersion ?? null, source: current?.source ?? null }
     } catch { return reply.code(503).send({ status: 'unavailable' }) }
   })
+  app.get<{ Querystring: { locale?: string } }>('/api/client/v1/sync/status', async (request, reply) => {
+    const locale = localeSchema.parse(request.query.locale ?? 'zh-CN')
+    reply.header('Cache-Control', 'no-store')
+    return await snapshots.syncStatus(locale) ?? reply.code(404).send({ error: 'No sync job', locale })
+  })
   for (const route of ['/api/client/v1/config', '/api/client/v1/:locale/config']) {
     app.get<{ Params: { locale?: string }; Querystring: { locale?: string } }>(route, async (request, reply) => {
       const locale = localeSchema.parse(request.params.locale ?? request.query.locale ?? 'zh-CN')

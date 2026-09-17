@@ -50,3 +50,15 @@ test('upstream failures never expose response bodies or retry billable requests'
   const denied = await setup(t, 'unauthorized')
   await assert.rejects(denied.api.probe(), /UPSTREAM_HTTP_401/)
 })
+
+test('formal sync saves resumable progress and does not publish an incomplete version', async t => {
+  const { root, transport } = await setup(t)
+  let published = false
+  const api = new AramggDeveloperApi('hx_live_test', 'zh-CN', root, transport, 3)
+  const result = await api.syncFormal(async () => { published = true; return { created: true } })
+  assert.equal(result.state, 'downloading')
+  assert.equal(result.cachedChampionDetails, 0)
+  assert.equal(result.remainingChampionDetails, 1)
+  assert.equal(result.creditsRequestedThisRun, 3)
+  assert.equal(published, false)
+})

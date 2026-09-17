@@ -1,0 +1,12 @@
+[Unit]
+Description=ARAMGG central snapshot version check and resumable sync
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/ARAMGG
+ExecStart=/usr/bin/docker compose -f compose.server.yaml --profile tools run --rm sync
+TimeoutStartSec=30min
+Nice=10

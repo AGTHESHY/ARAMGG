@@ -22,7 +22,8 @@ export class AramggDeveloperApi {
   private apiLocale: string
   private spent = 0
   private remaining: number | null = null
-  constructor(private key: string, private locale: Locale, private cacheRoot: string, private transport: typeof fetch = fetch) {
+  private lastPaidRequestAt = 0
+  constructor(private key: string, private locale: Locale, private cacheRoot: string, private transport: typeof fetch = fetch, private creditLimit = 5) {
     this.apiLocale = upstreamLocales[localeSchema.parse(locale)]
     this.prefix = `${origin}/api/v1/${this.apiLocale}/`
     if (!/^hx_live_[a-zA-Z0-9]+$/.test(key)) throw new UpstreamError('INVALID_KEY_FORMAT')
@@ -82,9 +83,12 @@ export class AramggDeveloperApi {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new UpstreamError('INVALID_PROBE_CACHE')
     }
-    if (this.spent + cost > 5 || (this.remaining !== null && this.remaining < cost)) throw new UpstreamError('PROBE_CREDIT_LIMIT')
+    if (this.spent + cost > this.creditLimit || (this.remaining !== null && this.remaining < cost)) throw new UpstreamError('SYNC_CREDIT_LIMIT')
+    const delay = 1050 - (Date.now() - this.lastPaidRequestAt)
+    if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay))
     this.spent += cost
     const envelope = this.verifyEnvelope(await this.json(await this.request(name, 'GET', true)), version)
+    this.lastPaidRequestAt = Date.now()
     await mkdir(path.dirname(file), { recursive: true })
     const temporary = `${file}.${randomUUID()}.tmp`
     await writeFile(temporary, JSON.stringify(envelope), { mode: 0o600, flag: 'wx' })
@@ -112,5 +116,76 @@ export class AramggDeveloperApi {
       creditsBefore, creditsRemaining: this.remaining, creditsRequestedThisRun: this.spent,
       estimatedFullLocaleCredits: 3 + champions.length * 2,
     }
+  }
+
+  async syncFormal(publish: (snapshot: unknown) => Promise<{ created: boolean }>) {
+    const config = await this.config()
+    const head = await this.request('champions.json', 'HEAD', true)
+    await head.body?.cancel()
+    const creditsBefore = this.remaining
+    const championsEnvelope = await this.resource('champions.json', config.dataVersion, 1)
+    const augmentsEnvelope = await this.resource('augments.json', config.dataVersion, 1)
+    const itemsEnvelope = await this.resource('items.json', config.dataVersion, 1)
+    const champions = z.array(rowSchema).min(1).parse(championsEnvelope.data)
+    const details = new Map<number, unknown>()
+    let stoppedByCreditLimit = false
+    for (const champion of champions) {
+      try {
+        const detail = detailSchema.parse((await this.resource(`champions/${champion.id}.json`, config.dataVersion, 2)).data)
+        if (detail.champion.id !== champion.id) throw new UpstreamError('UPSTREAM_CHAMPION_MISMATCH')
+        details.set(champion.id, detail)
+      } catch (error) {
+        if (error instanceof UpstreamError && error.code === 'SYNC_CREDIT_LIMIT') {
+          stoppedByCreditLimit = true
+          break
+        }
+        throw error
+      }
+    }
+    const finalConfig = await this.config()
+    if (finalConfig.dataVersion !== config.dataVersion) throw new UpstreamError('UPSTREAM_CHANGED_DURING_SYNC')
+    const status = {
+      schemaVersion: 1, locale: this.locale, dataVersion: config.dataVersion, gamePatch: config.gamePatch,
+      state: details.size === champions.length ? 'complete' : 'downloading',
+      totalChampions: champions.length, cachedChampionDetails: details.size,
+      remainingChampionDetails: champions.length - details.size,
+      stoppedByCreditLimit, creditsBefore, creditsRemaining: this.remaining,
+      creditsRequestedThisRun: this.spent, updatedAt: new Date().toISOString(), snapshotPublished: false,
+    }
+    await this.writeStatus(config.dataVersion, status)
+    if (details.size !== champions.length) return status
+
+    const files: Record<string, unknown> = {
+      'champions.json': { meta: championsEnvelope.meta, champions: championsEnvelope.data },
+      'augments.json': { meta: augmentsEnvelope.meta, augments: augmentsEnvelope.data },
+      'items.json': { meta: itemsEnvelope.meta, items: itemsEnvelope.data },
+    }
+    const shards = []
+    for (let offset = 0; offset < champions.length; offset += 20) {
+      const group = champions.slice(offset, offset + 20)
+      const shardPath = `champion-shards/${Math.floor(offset / 20)}.json`
+      shards.push({ path: shardPath, championIds: group.map(champion => champion.id) })
+      files[shardPath] = {
+        meta: championsEnvelope.meta,
+        champions: Object.fromEntries(group.map(champion => [champion.id, details.get(champion.id)])),
+      }
+    }
+    files['champion-shards/index.json'] = { meta: championsEnvelope.meta, shards }
+    const result = await publish({
+      locale: this.locale, dataVersion: config.dataVersion, gamePatch: config.gamePatch,
+      source: 'aramgg', files,
+    })
+    const completed = { ...status, state: 'published', snapshotPublished: true, snapshotCreated: result.created }
+    await this.writeStatus(config.dataVersion, completed)
+    return completed
+  }
+
+  private async writeStatus(version: string, status: unknown) {
+    const directory = path.join(this.cacheRoot, this.locale, versionSchema.parse(version))
+    await mkdir(directory, { recursive: true })
+    const target = path.join(directory, 'sync-status.json')
+    const temporary = `${target}.${randomUUID()}.tmp`
+    await writeFile(temporary, JSON.stringify(status, null, 2) + '\n', { mode: 0o600, flag: 'wx' })
+    await rename(temporary, target)
   }
 }

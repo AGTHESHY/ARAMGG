@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
 import type { Catalog, SnapshotRecord } from './catalog.js'
@@ -80,6 +80,25 @@ export class Snapshots {
     try {
       const body = await readFile(path.join(this.directory(locale, version), logicalPath))
       return { body, etag: `"${hash(body)}"` }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+      throw error
+    }
+  }
+  async syncStatus(locale: Locale): Promise<unknown | null> {
+    localeSchema.parse(locale)
+    const directory = path.join(this.root, 'upstream-cache', locale)
+    try {
+      const versions = await readdir(directory)
+      const statuses = await Promise.all(versions.map(async version => {
+        versionSchema.parse(version)
+        try { return JSON.parse(await readFile(path.join(directory, version, 'sync-status.json'), 'utf8')) as { updatedAt?: string } }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+          throw error
+        }
+      }))
+      return statuses.filter(status => status !== null).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))[0] ?? null
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
       throw error

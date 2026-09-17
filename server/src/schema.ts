@@ -5,11 +5,11 @@ export type Locale = z.infer<typeof localeSchema>
 export const versionSchema = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,79}$/)
 export const filePathSchema = z.string().regex(/^(augments|champions|items)\.json$|^champion-shards\/(index|[a-zA-Z0-9_-]+)\.json$/)
 const statsSchema = z.object({
-  games: z.number().int().nonnegative(),
-  wins: z.number().int().nonnegative(),
+  games: z.number().int().nonnegative().nullable(),
+  wins: z.number().int().nonnegative().nullable(),
   winRate: z.number().min(0).max(1),
-}).passthrough().refine(s => s.wins <= s.games, 'Wins exceed games')
-const championSchema = z.object({ id: z.number().int().positive(), name: z.string().min(1), stats: statsSchema }).passthrough()
+}).passthrough().refine(s => s.wins == null || s.games == null || s.wins <= s.games, 'Wins exceed games')
+const championSchema = z.object({ id: z.number().int().positive(), name: z.string().min(1), stats: statsSchema.nullable() }).passthrough()
 const detailSchema = z.object({
   champion: z.object({ id: z.number().int().positive() }).passthrough(),
   builds: z.array(z.object({ stats: statsSchema }).passthrough()),

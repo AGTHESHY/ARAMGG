@@ -78,6 +78,33 @@ services:
     logging:
       driver: json-file
       options: { max-size: "5m", max-file: "2" }
+  sync:
+    profiles: ["tools"]
+    image: mayhem-companion-server:0.1.0
+    mem_limit: 160m
+    memswap_limit: 160m
+    cpus: 0.5
+    read_only: true
+    tmpfs: [/tmp:size=16m]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    command: ["node", "dist/sync-cli.js"]
+    environment:
+      OWNER_API_KEY_FILE: /run/secrets/aramgg_owner_key
+      SYNC_CACHE_DIR: /app/data/upstream-cache
+      SYNC_CREDIT_LIMIT: ${SYNC_CREDIT_LIMIT:-200}
+      DATABASE_URL: postgres://mayhem:${POSTGRES_PASSWORD}@postgres:5432/mayhem
+      DATA_DIR: /app/data
+      NODE_OPTIONS: --max-old-space-size=112
+    secrets: [aramgg_owner_key]
+    volumes:
+      - snapshot-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "2" }
 secrets:
   aramgg_owner_key:
     file: ./secrets/aramgg_owner_key
