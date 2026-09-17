@@ -1,0 +1,86 @@
+name: mayhem-companion
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    mem_limit: 160m
+    memswap_limit: 160m
+    cpus: 0.5
+    pids_limit: 100
+    command: ["postgres", "-c", "shared_buffers=32MB", "-c", "work_mem=2MB", "-c", "maintenance_work_mem=16MB", "-c", "max_connections=20"]
+    environment:
+      POSTGRES_DB: mayhem
+      POSTGRES_USER: mayhem
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a server-only password in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mayhem -d mayhem"]
+      interval: 30s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "2" }
+  api:
+    image: mayhem-companion-server:0.1.0
+    build:
+      context: ./server
+      target: runtime
+    restart: unless-stopped
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 0.5
+    pids_limit: 60
+    read_only: true
+    tmpfs: [/tmp:size=16m]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8788
+      NODE_OPTIONS: --max-old-space-size=80
+      DATABASE_URL: postgres://mayhem:${POSTGRES_PASSWORD}@postgres:5432/mayhem
+      DATA_DIR: /app/data
+    ports:
+      - "127.0.0.1:${MAYHEM_PORT:-8788}:8788"
+    volumes:
+      - snapshot-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8788/health/ready').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "2" }
+  probe:
+    profiles: ["tools"]
+    image: mayhem-companion-server:0.1.0
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 0.5
+    read_only: true
+    tmpfs: [/tmp:size=16m]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    command: ["node", "dist/probe-cli.js"]
+    environment:
+      OWNER_API_KEY_FILE: /run/secrets/aramgg_owner_key
+      PROBE_CACHE_DIR: /app/data/upstream-probe
+      NODE_OPTIONS: --max-old-space-size=80
+    secrets: [aramgg_owner_key]
+    volumes:
+      - snapshot-data:/app/data
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "2" }
+secrets:
+  aramgg_owner_key:
+    file: ./secrets/aramgg_owner_key
+volumes:
+  postgres-data:
+  snapshot-data:

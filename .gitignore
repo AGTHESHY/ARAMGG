@@ -5,3 +5,5 @@ dist/
 server/data/
 references/
 .DS_Store
+secrets/
+*.tar.gz

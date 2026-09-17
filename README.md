@@ -30,6 +30,8 @@ docker compose exec api node dist/cli.js seed-demo
 
 服务只监听本机 `127.0.0.1:8788`；数据库不暴露宿主机端口。
 
+测试服务器使用独立的低内存配置 `compose.server.yaml`；部署方式、SSH 隧道和真实上游 Key 测试见 [服务器部署说明](docs/server-deployment.md)。
+
 - `GET /health/live`：进程状态。
 - `GET /health/ready`：数据库状态及 `dataReady`。无快照时进程仍可正常运行，`dataReady=false`。
 - `GET /api/client/v1/config`：简体中文当前版本；未导入快照时返回 503。
