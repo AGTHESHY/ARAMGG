@@ -5,6 +5,10 @@
         <p class="section-kicker">{{ t('matchHistory.title') }}</p>
         <p class="match-history-description">{{ t('matchHistory.description') }}</p>
       </div>
+      <div class="match-history-actions">
+      <select v-model.number="selectedQueueId" :disabled="loading" @change="queryPage(0)">
+        <option v-for="mode in modeOptions" :key="mode.id" :value="mode.id">{{ mode.label }}</option>
+      </select>
       <button
         class="match-history-refresh"
         type="button"
@@ -15,6 +19,7 @@
       >
         <RefreshCw class="match-history-refresh-icon" :class="{ spinning: loading }" />
       </button>
+      </div>
     </header>
 
     <p v-if="status" class="match-history-status error" role="alert">
@@ -26,7 +31,8 @@
       <div class="match-history-meta">
         <span>{{ t('matchHistory.platform', { platform: page.platformId }) }}</span>
         <span>{{ t('matchHistory.currentPageMatches', { count: page.returnedCount }) }}</span>
-        <span>{{ t('matchHistory.hextechOnly') }}</span>
+        <span>{{ selectedModeLabel }}</span>
+        <span>{{ t('matchHistory.pageWinRate', { value: formatWinRate(page.winRate), wins: page.wins, count: page.validGameCount }) }}</span>
       </div>
       <small>{{ t('matchHistory.queriedAt', { time: formatTime(page.queriedAt) }) }}</small>
     </div>
@@ -142,7 +148,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-vue-next'
 import type {
@@ -159,6 +165,19 @@ const { t } = useI18n()
 const page = ref<HextechAramMatchHistoryPage | null>(null)
 const loading = ref(false)
 const status = ref('')
+const selectedQueueId = ref(2400)
+const modeOptions = computed(() => [
+  { id: 0, label: t('matchHistory.modeAll') },
+  { id: 2400, label: t('matchHistory.modeMayhem') },
+  { id: 450, label: t('matchHistory.modeAram') },
+  { id: 420, label: t('matchHistory.modeRankedSolo') },
+  { id: 440, label: t('matchHistory.modeRankedFlex') },
+  { id: 400, label: t('matchHistory.modeDraft') },
+  { id: 430, label: t('matchHistory.modeBlind') },
+  { id: 1700, label: t('matchHistory.modeArena') },
+  { id: 900, label: t('matchHistory.modeUrf') },
+])
+const selectedModeLabel = computed(() => modeOptions.value.find(mode => mode.id === selectedQueueId.value)?.label || '')
 
 function formatTime(timestamp: number): string {
   return new Intl.DateTimeFormat(undefined, {
@@ -177,6 +196,10 @@ function formatDuration(durationSeconds: number): string {
 
 function formatKda(match: HextechAramMatchHistoryMatch): string {
   return ((match.kills + match.assists) / Math.max(1, match.deaths)).toFixed(1)
+}
+
+function formatWinRate(value: number | null): string {
+  return value == null ? '—' : `${Math.round(value * 100)}%`
 }
 
 function championName(match: HextechAramMatchHistoryMatch): string {
@@ -209,6 +232,7 @@ async function queryPage(startIndex: number): Promise<void> {
     const result = await electronAPI.matchHistory.queryCurrent({
       startIndex,
       count: PAGE_SIZE,
+      queueId: selectedQueueId.value,
     })
     if (!result.success || !result.data) {
       status.value = t('matchHistory.queryFailed', { error: result.error || '' })
@@ -250,6 +274,21 @@ onMounted(() => {
 
 .match-history-header {
   align-items: flex-start;
+}
+
+.match-history-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.match-history-actions select {
+  min-width: 132px;
+  border: 1px solid var(--lol-border-soft);
+  border-radius: 3px;
+  padding: 7px 28px 7px 9px;
+  color: var(--lol-text-primary);
+  background: rgba(7, 10, 13, 0.9);
 }
 
 .match-history-description,

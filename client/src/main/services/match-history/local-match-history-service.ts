@@ -105,6 +105,12 @@ function asNonNegativeInteger(value: unknown): number {
   return Number.isInteger(numberValue) && numberValue >= 0 ? numberValue : 0
 }
 
+function asBoolean(value: unknown): boolean {
+  if (value === true || value === 1) return true
+  if (typeof value !== 'string') return false
+  return ['true', 'win', 'victory', '1'].includes(value.trim().toLowerCase())
+}
+
 function normalizeInstallationId(value: unknown): string {
   return typeof value === 'string' && INSTALLATION_ID_PATTERN.test(value)
     ? value.toLowerCase()
@@ -227,8 +233,8 @@ export function normalizeGame(gamePayload: unknown, fallbackPlatformId: string, 
       teamId: asNonNegativeInteger(rawParticipant.teamId),
       playerSubteamId: asNonNegativeInteger(stats.playerSubteamId),
       subteamPlacement: asNonNegativeInteger(stats.subteamPlacement),
-      win: stats.win === true,
-      gameEndedInEarlySurrender: stats.gameEndedInEarlySurrender === true,
+      win: asBoolean(stats.win),
+      gameEndedInEarlySurrender: asBoolean(stats.gameEndedInEarlySurrender),
       kills: asNonNegativeInteger(stats.kills),
       deaths: asNonNegativeInteger(stats.deaths),
       assists: asNonNegativeInteger(stats.assists),

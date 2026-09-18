@@ -78,6 +78,15 @@ describe('SGP match-history collection', () => {
     expect(getSgpMatchHistoryOrigin('HN10')).toBe('https://hn10-k8s-sgp.lol.qq.com:21019')
   })
 
+  it('omits the SGP queue tag when all modes are selected', async () => {
+    vi.mocked(axios.get).mockResolvedValue({ data: { games: [] }, status: 200, headers: {} })
+    const service = new SgpMatchHistoryService(createLcuService())
+    await service.getSummaries(puuid, 'HN10', 0, 20, 0)
+    expect(axios.get).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      params: { startIndex: 0, count: 20 },
+    }))
+  })
+
   it('normalizes flat SGP SUMMARY participants without per-game LCU requests', () => {
     const game = normalizeGame({
       gameId: 123,
@@ -136,5 +145,13 @@ describe('SGP match-history collection', () => {
         augments: [18, 42],
       }),
     ])
+  })
+
+  it.each([true, 1, 'true', 'Win', 'VICTORY'])('normalizes SGP win value %s', (win) => {
+    const normalized = normalizeGame({
+      gameId: 456, platformId: 'HN10', gameMode: 'ARAM', queueId: 450,
+      participants: [{ participantId: 1, puuid, championId: 1, win }],
+    }, 'HN10', 500)
+    expect(normalized?.participants[0]?.win).toBe(true)
   })
 })

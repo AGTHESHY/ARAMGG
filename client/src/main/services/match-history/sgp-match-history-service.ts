@@ -162,11 +162,12 @@ export class SgpMatchHistoryInterruptedError extends Error {
 export class SgpMatchHistoryService {
   constructor(private readonly lcuService: LCUService) {}
 
-  async getHextechAramSummaries(
+  async getSummaries(
     puuid: string,
     platformId: string,
     startIndex: number,
     count: number,
+    queueId = HEXTECH_ARAM_QUEUE_ID,
     shouldContinue?: () => Promise<boolean>,
   ): Promise<AnyRecord[]> {
     if (!isValidPuuid(puuid)) {
@@ -202,7 +203,7 @@ export class SgpMatchHistoryService {
         platformId: normalizePlatformId(platformId),
         startIndex: normalizedStartIndex,
         count: normalizedCount,
-        tag: HEXTECH_ARAM_QUEUE_TAG,
+        tag: queueId > 0 ? `q_${queueId}` : null,
         attempt: attempt + 1,
         tokenDurationMs,
       })
@@ -212,8 +213,7 @@ export class SgpMatchHistoryService {
           params: {
             startIndex: normalizedStartIndex,
             count: normalizedCount,
-            tag: HEXTECH_ARAM_QUEUE_TAG,
-            tagsQueryType: 'AND',
+            ...(queueId > 0 ? { tag: `q_${queueId}`, tagsQueryType: 'AND' } : {}),
           },
           proxy: false,
           timeout: SGP_MATCH_HISTORY_TIMEOUT_MS,
@@ -263,5 +263,15 @@ export class SgpMatchHistoryService {
 
     const requestError = lastError as SgpRequestError
     throw new Error(`SGP match-history request failed${requestError?.response?.status ? ` (${requestError.response.status})` : ''}`)
+  }
+
+  async getHextechAramSummaries(
+    puuid: string,
+    platformId: string,
+    startIndex: number,
+    count: number,
+    shouldContinue?: () => Promise<boolean>,
+  ): Promise<AnyRecord[]> {
+    return this.getSummaries(puuid, platformId, startIndex, count, HEXTECH_ARAM_QUEUE_ID, shouldContinue)
   }
 }

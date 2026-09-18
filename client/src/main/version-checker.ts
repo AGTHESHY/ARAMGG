@@ -132,7 +132,7 @@ export async function getVersionInfo() {
     isNewer: comparison.isNewer,
     isBelowMinimumVersion,
     statusText: getSeverityText(comparison.severity),
-    changelog: getChangelogEntries(config, clientConfig),
+    changelog: getChangelogEntries(config ?? undefined, clientConfig),
   }
 }
 

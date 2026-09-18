@@ -8,7 +8,6 @@ import { loadAugmentDetail, loadChampionRoster, loadItems } from '../../data-loa
 import logger from '../../modules/logger.ts'
 import type LCUService from '../lcu/lcu-service.ts'
 import { normalizeGame } from './local-match-history-service.ts'
-import { isHextechAramGame } from './statistics.ts'
 import { SgpMatchHistoryService } from './sgp-match-history-service.ts'
 import type { StoredMatchHistoryGame } from './types.ts'
 
@@ -38,6 +37,7 @@ type BuildPageOptions = {
   count: number
   scannedCount: number
   queriedAt: number
+  queueId?: number
   labels?: HextechAramQueryLabels
 }
 
@@ -110,8 +110,9 @@ function toMatch(
   game: StoredMatchHistoryGame,
   currentPuuid: string,
   labels: HextechAramQueryLabels,
+  queueId = 0,
 ): HextechAramMatchHistoryMatch | null {
-  if (!isHextechAramGame(game)) return null
+  if (queueId > 0 && game.queueId !== queueId) return null
 
   const participant = game.participants.find((entry) => entry.puuid === currentPuuid)
   if (!participant) return null
@@ -153,12 +154,17 @@ export function normalizeHextechAramQuery(
     ? Math.min(requestedCount, MAX_HEXTECH_ARAM_QUERY_COUNT)
     : DEFAULT_HEXTECH_ARAM_QUERY_COUNT
 
-  return { startIndex, count }
+  const requestedQueueId = Number(query?.queueId)
+  const queueId = Number.isInteger(requestedQueueId) && requestedQueueId >= 0 && requestedQueueId <= 10000
+    ? requestedQueueId
+    : 2400
+  return { startIndex, count, queueId }
 }
 
 export function buildHextechAramMatchHistoryPage(
   options: BuildPageOptions,
 ): HextechAramMatchHistoryPage {
+  const queueId = options.queueId ?? 2400
   const labels = options.labels || {}
   const seenGameIds = new Set<number>()
   const matches = [...options.games]
@@ -166,9 +172,11 @@ export function buildHextechAramMatchHistoryPage(
     .flatMap((game) => {
       if (seenGameIds.has(game.gameId)) return []
       seenGameIds.add(game.gameId)
-      const match = toMatch(game, options.currentPuuid, labels)
+      const match = toMatch(game, options.currentPuuid, labels, queueId)
       return match ? [match] : []
     })
+  const countable = matches.filter(match => match.result !== 'remake')
+  const wins = countable.filter(match => match.result === 'win').length
 
   return {
     playerName: options.playerName,
@@ -177,6 +185,10 @@ export function buildHextechAramMatchHistoryPage(
     startIndex: options.startIndex,
     count: options.count,
     returnedCount: matches.length,
+    queueId,
+    validGameCount: countable.length,
+    wins,
+    winRate: countable.length ? wins / countable.length : null,
     hasPrevious: options.startIndex > 0,
     hasMore: options.scannedCount >= options.count,
     matches,
@@ -210,11 +222,12 @@ export class HextechAramQueryService {
       throw new Error('无法识别当前账号所在区服')
     }
 
-    const rawGames = await this.sgpMatchHistoryService.getHextechAramSummaries(
+    const rawGames = await this.sgpMatchHistoryService.getSummaries(
       currentPuuid,
       platformId,
       range.startIndex,
       range.count,
+      range.queueId,
     )
     const queriedAt = Date.now()
     const normalizedGames = rawGames.flatMap((game) => {
@@ -232,6 +245,7 @@ export class HextechAramQueryService {
       count: range.count,
       scannedCount: rawGames.length,
       queriedAt,
+      queueId: range.queueId,
       labels,
     })
   }

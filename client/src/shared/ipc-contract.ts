@@ -121,6 +121,10 @@ export interface HextechAramMatchHistoryPage extends LooseRecord {
   startIndex: number
   count: number
   returnedCount: number
+  queueId: number
+  validGameCount: number
+  wins: number
+  winRate: number | null
   hasPrevious: boolean
   hasMore: boolean
   matches: HextechAramMatchHistoryMatch[]
@@ -129,6 +133,7 @@ export interface HextechAramMatchHistoryPage extends LooseRecord {
 export interface HextechAramMatchHistoryQuery extends LooseRecord {
   startIndex?: number
   count?: number
+  queueId?: number
 }
 
 export interface HextechAramMatchHistoryQueryResult extends OperationResult {

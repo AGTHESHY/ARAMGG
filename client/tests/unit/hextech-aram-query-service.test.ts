@@ -47,15 +47,34 @@ function game(overrides: Partial<StoredMatchHistoryGame> = {}): StoredMatchHisto
 
 describe('Hextech ARAM match-history query', () => {
   it('bounds renderer-controlled pagination values', () => {
-    expect(normalizeHextechAramQuery(undefined)).toEqual({ startIndex: 0, count: 10 })
+    expect(normalizeHextechAramQuery(undefined)).toEqual({ startIndex: 0, count: 10, queueId: 2400 })
     expect(normalizeHextechAramQuery({ startIndex: -1, count: 0 })).toEqual({
       startIndex: 0,
       count: 10,
+      queueId: 2400,
     })
     expect(normalizeHextechAramQuery({ startIndex: 999_999, count: 999 })).toEqual({
       startIndex: MAX_HEXTECH_ARAM_QUERY_START_INDEX,
       count: MAX_HEXTECH_ARAM_QUERY_COUNT,
+      queueId: 2400,
     })
+  })
+
+  it('filters and calculates win rate for the selected queue', () => {
+    const normalAramWin = game({ gameId: 8, gameKey: 'HN10:8', gameMode: 'ARAM', queueId: 450 })
+    const normalAramLoss = game({
+      gameId: 9,
+      gameKey: 'HN10:9',
+      gameMode: 'ARAM',
+      queueId: 450,
+      participants: [{ ...game().participants[0], win: false }],
+    })
+    const page = buildHextechAramMatchHistoryPage({
+      games: [game(), normalAramWin, normalAramLoss], currentPuuid, playerName: '', platformId: 'HN10',
+      startIndex: 0, count: 10, scannedCount: 3, queriedAt: 1_000, queueId: 450,
+    })
+    expect(page.matches.map(match => match.gameId)).toEqual([8, 9])
+    expect(page).toMatchObject({ queueId: 450, validGameCount: 2, wins: 1, winRate: 0.5 })
   })
 
   it('returns only the current player\'s KIWI matches and preserves pagination state', () => {
