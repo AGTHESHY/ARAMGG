@@ -14,6 +14,7 @@ import {
   createEmptyAramBenchRecommendation,
   getAramBenchRecommendation,
 } from '../aram/bench-recommendation.ts'
+import { queryLobbyMemberStats } from '../match-history/lobby-stats-service.ts'
 import { trustedIpcMain as ipcMain } from '../../security/trusted-ipc.ts'
 
 const LCU_READ_TIMEOUT_MS = 8 * 1000
@@ -320,6 +321,37 @@ export function registerLCUIpcHandlers(): void {
         championId: null,
         error: err.message,
       }
+    }
+  })
+
+  ipcMain.handle('lcu-bench-swap', async (_event, championId: number) => {
+    const { service, error } = await getLcuServiceFromStore()
+    if (!service) {
+      return { success: false, error, championId }
+    }
+
+    const success = await service.benchSwap(championId)
+    return { success, championId, error: success ? null : '换英雄失败' }
+  })
+
+  ipcMain.handle('lcu-get-lobby-stats', async () => {
+    const { service, error } = await getLcuServiceFromStore()
+    if (!service) {
+      return { success: false, error }
+    }
+
+    try {
+      const lobby = await service.getLobby()
+      if (!lobby) {
+        return { success: false, error: '未在组队大厅' }
+      }
+
+      const data = await queryLobbyMemberStats(service, lobby, 50)
+      return { success: true, data }
+    } catch (error) {
+      const err = error as Error
+      logger.warn('[LCU] lobby stats query failed:', err.message)
+      return { success: false, error: err.message }
     }
   })
 

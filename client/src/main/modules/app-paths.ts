@@ -35,7 +35,12 @@ function getDefaultUserDataDir(): string {
     }
 
     try {
-        cachedDefaultUserDataDir = electronApp.getPath('userData')
+        const devDataDir = path.join(os.homedir(), '.aramgg_client')
+        if (!electronApp.isPackaged) {
+            cachedDefaultUserDataDir = devDataDir
+        } else {
+            cachedDefaultUserDataDir = electronApp.getPath('userData')
+        }
     } catch {
         cachedDefaultUserDataDir = path.join(os.homedir(), '.aramgg_client')
     }

@@ -25,6 +25,7 @@ import {
     stopLocalMatchHistoryBackgroundSync,
 } from '../services/match-history/background-sync.ts'
 import { queryTeammateWinrates } from '../services/match-history/teammate-winrate-service.ts'
+import { queryLobbyMemberStats } from '../services/match-history/lobby-stats-service.ts'
 import { checkForClientUpdate } from '../version-checker.ts'
 import {
     checkForAppUpdate,
@@ -131,6 +132,7 @@ let lastInProgressChampionRecoveryAttemptAt = 0
 let inProgressChampionRecoveryInFlight = false
 let champSelectSnapshotPollInFlight = false
 let lastTeammateWinrateSignature = ''
+let lastLobbyStatsSignature = ''
 let itemSetPreloadGeneration = 0
 let itemSetPreloadActiveCount = 0
 let itemSetPreloadQueue = []
@@ -850,6 +852,30 @@ async function showTeammateWinrates(lcuService, snapshot) {
     }
 }
 
+async function showLobbyStats(lcuService) {
+    try {
+        const lobby = await lcuService.getLobby()
+        if (!lobby) {
+            return
+        }
+
+        const members = Array.isArray(lobby.members) ? lobby.members : []
+        const signature = members.map(m => m.puuid || m.summonerId || '').join(',')
+        if (!signature || signature === lastLobbyStatsSignature) return
+        lastLobbyStatsSignature = signature
+
+        const payload = await queryLobbyMemberStats(lcuService, lobby, 50)
+        notifyAllWindows('lobby-stats-updated', payload)
+        logger.info('[lobby-stats] overlay updated', {
+            queueId: payload.queueId,
+            memberCount: payload.members.length,
+            availableCount: payload.members.filter(m => m.winRate != null).length,
+        })
+    } catch (error) {
+        logger.debug('[lobby-stats] query failed:', error instanceof Error ? error.message : String(error))
+    }
+}
+
 async function showChampionInsightForChampSelect(lcuService) {
     await pollChampSelectSnapshot(lcuService, 'champ-select-insight', true)
 }
@@ -1233,6 +1259,7 @@ async function initGameFlowMonitor() {
                 const prevPhase = transition.previous.phase
                 const currentPhase = transition.current.phase
                 if (currentPhase !== 'ChampSelect') lastTeammateWinrateSignature = ''
+                if (currentPhase !== 'Lobby') lastLobbyStatsSignature = ''
                 logger.info(`游戏阶段变化(${source}): ${prevPhase || 'unknown'} → ${phase}`)
                 notifyAllWindows('game-phase-changed', { phase: currentPhase, prevPhase })
                 clearAugmentOverlayForPhase(currentPhase)
@@ -1247,6 +1274,9 @@ async function initGameFlowMonitor() {
                         lastAutoAppliedItemSetChampionId = null
                         resetChampSelectItemSetState(`LCU phase ${currentPhase}`)
                         stopAutoScreenshotForGame(`LCU phase ${currentPhase}`)
+                        if (currentPhase === 'Lobby') {
+                            void showLobbyStats(lcuService)
+                        }
                         break
                     case 'ENTER_CHAMP_SELECT':
                         logger.info('进入选人阶段 - 暂停游戏内海克斯 OCR')
@@ -1427,6 +1457,8 @@ async function initGameFlowMonitor() {
 
                 if (gameSessionCoordinator.getState().phase === 'ChampSelect') {
                     await pollChampSelectSnapshot(lcuService, 'champ-select-poll')
+                } else if (gameSessionCoordinator.getState().phase === 'Lobby') {
+                    void showLobbyStats(lcuService)
                 }
             } catch (error) {
                 logger.warn('游戏流程轮询出错:', error.message)

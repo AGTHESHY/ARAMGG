@@ -16,283 +16,326 @@
                 </div>
             </header>
 
-            <main class="hex-scroll">
-                <div class="status-strip">
-                    <div class="status-header">
-                        <div>
-                            <span class="section-kicker">{{ t('display.runningStatus') }}</span>
-                            <h2>{{ t('display.console') }}</h2>
-                        </div>
-                        <Select
-                            v-model="selectedLocale"
-                            :disabled="localeLoading"
-                            @update:model-value="changeLocale"
+            <div class="hex-body">
+                <nav class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+                    <button class="sidebar-toggle" type="button" :title="sidebarCollapsed ? '展开导航' : '收起导航'" @click="toggleSidebar">
+                        <ChevronLeft v-if="!sidebarCollapsed" class="toggle-icon" />
+                        <ChevronRight v-else class="toggle-icon" />
+                    </button>
+                    <ul class="nav-list">
+                        <li
+                            v-for="item in navItems"
+                            :key="item.id"
+                            class="nav-item"
+                            :class="{ active: activeNav === item.id }"
+                            :title="item.label"
+                            @click="selectNav(item.id)"
                         >
-                            <SelectTrigger
-                                class="header-locale-trigger"
-                                :aria-label="t('display.appLanguage')"
-                                :title="t('display.appLanguage')"
-                            >
-                                <RefreshCw
-                                    v-if="localeLoading"
-                                    class="locale-loading-icon"
-                                    aria-hidden="true"
-                                />
-                                <Languages v-else class="header-locale-icon" aria-hidden="true" />
-                                <SelectValue class="header-locale-value">
-                                    {{ selectedLocaleLabel }}
-                                </SelectValue>
-                                <span class="locale-live-status" aria-live="polite">
-                                    {{ localeLoading ? t('display.switching') : selectedLocaleLabel }}
-                                </span>
-                            </SelectTrigger>
-                            <SelectContent
-                                align="end"
-                                :side-offset="6"
-                                class="locale-select-content"
-                            >
-                                <SelectItem
-                                    v-for="localeOption in supportedLocales"
-                                    :key="localeOption.code"
-                                    :value="localeOption.code"
-                                    :text-value="localeOption.nativeLabel"
-                                    class="locale-select-item"
-                                >
-                                    <span class="locale-option-copy">
-                                        <span>{{ localeOption.nativeLabel }}</span>
-                                        <small>{{ localeOption.code }}</small>
-                                    </span>
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div class="status-grid">
-                        <div>
-                            <span>{{ t('display.clientVersion') }}</span>
-                            <strong>{{ clientVersionLabel }}</strong>
-                            <small v-if="versionHint">{{ versionHint }}</small>
-                        </div>
-                        <div>
-                            <span>{{ t('display.dataVersion') }}</span>
-                            <strong>{{ dataVersionLabel }}</strong>
-                            <small>{{ dataLocaleStatusLabel }}</small>
-                        </div>
-                        <div class="lcu-status-card">
-                            <span>{{ t('display.lcuConnection') }}</span>
-                            <strong>{{ t('display.autoDiscover') }}</strong>
-                            <small>{{ manualLolPath ? t('display.runningClientWithFallback') : t('display.runningClient') }}</small>
-                        </div>
-                    </div>
+                            <component :is="item.icon" class="nav-icon" />
+                            <span v-if="!sidebarCollapsed" class="nav-label">{{ item.label }}</span>
+                        </li>
+                    </ul>
+                </nav>
 
-                    <section class="update-panel" :class="updatePanelClass">
-                        <div class="update-main">
-                            <div class="update-copy">
-                                <div class="update-heading">
-                                    <span>{{ t('display.appUpdate') }}</span>
-                                    <strong>{{ updateTitle }}</strong>
+                <div class="content-area">
+                    <header class="content-header">
+                        <div class="header-left">
+                            <h2>{{ currentNavLabel }}</h2>
+                        </div>
+                        <div class="header-right">
+                            <span class="status-indicator" :class="lcuConnected ? 'online' : 'offline'">
+                                <span class="status-dot"></span>
+                                <span class="status-text">{{ lcuConnected ? 'League 已连接' : 'League 未连接' }}</span>
+                            </span>
+                            <Select
+                                v-model="selectedLocale"
+                                :disabled="localeLoading"
+                                @update:model-value="changeLocale"
+                            >
+                                <SelectTrigger
+                                    class="header-locale-trigger"
+                                    :aria-label="t('display.appLanguage')"
+                                    :title="t('display.appLanguage')"
+                                >
+                                    <RefreshCw
+                                        v-if="localeLoading"
+                                        class="locale-loading-icon"
+                                        aria-hidden="true"
+                                    />
+                                    <Languages v-else class="header-locale-icon" aria-hidden="true" />
+                                    <SelectValue class="header-locale-value">
+                                        {{ selectedLocaleLabel }}
+                                    </SelectValue>
+                                    <span class="locale-live-status" aria-live="polite">
+                                        {{ localeLoading ? t('display.switching') : selectedLocaleLabel }}
+                                    </span>
+                                </SelectTrigger>
+                                <SelectContent
+                                    align="end"
+                                    :side-offset="6"
+                                    class="locale-select-content"
+                                >
+                                    <SelectItem
+                                        v-for="localeOption in supportedLocales"
+                                        :key="localeOption.code"
+                                        :value="localeOption.code"
+                                        :text-value="localeOption.nativeLabel"
+                                        class="locale-select-item"
+                                    >
+                                        <span class="locale-option-copy">
+                                            <span>{{ localeOption.nativeLabel }}</span>
+                                            <small>{{ localeOption.code }}</small>
+                                        </span>
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </header>
+
+                    <main class="content-scroll">
+                        <!-- 大乱斗工具 -->
+                        <div v-if="activeNav === 'aram-tools'" class="nav-section">
+                            <ChampionMonitor />
+                            <ItemSetInstaller />
+                            <LobbyStatsPanel />
+                            <OverlayPreferences
+                                @post-game-auto-show-changed="setPostGameShareAutoShowEnabled"
+                            />
+                        </div>
+
+                        <!-- 战绩中心 -->
+                        <div v-if="activeNav === 'match-history'" class="nav-section">
+                            <MatchHistoryPanel />
+                            <section class="post-game-panel">
+                                <div class="section-header">
+                                    <p class="section-kicker">{{ t('display.postGamePoster') }}</p>
+                                </div>
+                                <button
+                                    class="post-game-share-button mock"
+                                    type="button"
+                                    :disabled="postGameShareLoading"
+                                    @click="createMockPostGameSharePoster"
+                                >
+                                    <Sparkles class="icon" />
+                                    <span class="button-copy">
+                                        <span class="text">{{ t('display.mockGenerate') }}</span>
+                                        <span class="hint">{{ t('display.refreshPreviewEveryClick') }}</span>
+                                    </span>
+                                </button>
+                            </section>
+                        </div>
+
+                        <!-- 用户中心 -->
+                        <div v-if="activeNav === 'user-center'" class="nav-section">
+                            <AccountAndSharing />
+                        </div>
+
+                        <!-- 设置 -->
+                        <div v-if="activeNav === 'settings'" class="nav-section">
+                            <div class="status-strip">
+                                <div class="status-grid">
+                                    <div>
+                                        <span>{{ t('display.clientVersion') }}</span>
+                                        <strong>{{ clientVersionLabel }}</strong>
+                                        <small v-if="versionHint">{{ versionHint }}</small>
+                                    </div>
+                                    <div>
+                                        <span>{{ t('display.dataVersion') }}</span>
+                                        <strong>{{ dataVersionLabel }}</strong>
+                                        <small>{{ dataLocaleStatusLabel }}</small>
+                                    </div>
+                                    <div class="lcu-status-card">
+                                        <span>{{ t('display.lcuConnection') }}</span>
+                                        <strong>{{ t('display.autoDiscover') }}</strong>
+                                        <small>{{ manualLolPath ? t('display.runningClientWithFallback') : t('display.runningClient') }}</small>
+                                    </div>
+                                </div>
+
+                                <section class="update-panel" :class="updatePanelClass">
+                                    <div class="update-main">
+                                        <div class="update-copy">
+                                            <div class="update-heading">
+                                                <span>{{ t('display.appUpdate') }}</span>
+                                                <strong>{{ updateTitle }}</strong>
+                                            </div>
+                                        </div>
+                                        <div class="update-actions">
+                                            <button
+                                                v-if="showCheckUpdateAction"
+                                                class="update-action"
+                                                type="button"
+                                                :title="t('display.checkUpdate')"
+                                                :disabled="!canCheckUpdate"
+                                                @click="checkAppUpdate"
+                                            >
+                                                <RefreshCw class="update-action-icon" :class="{ spinning: updateIsChecking }" />
+                                            </button>
+                                            <button
+                                                v-if="showInstallUpdateAction"
+                                                class="update-action accent"
+                                                type="button"
+                                                :title="installUpdateTitle"
+                                                :disabled="!canInstallUpdate"
+                                                @click="installAppUpdate"
+                                            >
+                                                <RotateCw class="update-action-icon" />
+                                            </button>
+                                            <button
+                                                v-else-if="showManualDownloadLink"
+                                                class="update-action accent"
+                                                type="button"
+                                                :title="t('display.openDownload')"
+                                                @click="openDownloadUrl"
+                                            >
+                                                <Download class="update-action-icon" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div v-if="showUpdateProgress" class="update-progress">
+                                        <div class="update-progress-track" aria-hidden="true">
+                                            <span :style="{ width: updateProgressWidth }"></span>
+                                        </div>
+                                        <span class="update-progress-text">{{ updateProgressText }}</span>
+                                    </div>
+                                </section>
+
+                                <button
+                                    class="game-directory-toggle"
+                                    type="button"
+                                    :aria-expanded="showAdvancedLcuConfig"
+                                    @click="toggleAdvancedLcuConfig"
+                                >
+                                    <span>{{ t('display.gameDirectory') }}</span>
+                                    <ChevronRight
+                                        class="game-directory-arrow"
+                                        :class="{ open: showAdvancedLcuConfig }"
+                                    />
+                                </button>
+                                <p class="game-directory-hint">
+                                    {{ t('display.gameDirectoryAdminHint') }}
+                                </p>
+
+                                <section v-if="showAdvancedLcuConfig" class="advanced-lcu-panel">
+                                    <div class="manual-path-row">
+                                        <input
+                                            v-model="manualLolPath"
+                                            class="manual-path-input"
+                                            type="text"
+                                            spellcheck="false"
+                                            placeholder="C:\Riot Games\League of Legends"
+                                            @blur="validateManualLolPath"
+                                        />
+                                        <button
+                                            class="manual-path-button"
+                                            type="button"
+                                            :title="t('display.browseDirectory')"
+                                            :disabled="manualPathLoading"
+                                            @click="browseManualLolPath"
+                                        >
+                                            <FolderSearch class="manual-path-icon" />
+                                        </button>
+                                        <button
+                                            class="manual-path-button accent"
+                                            type="button"
+                                            :title="t('display.saveDirectory')"
+                                            :disabled="manualPathLoading"
+                                            @click="saveManualLolPath"
+                                        >
+                                            <Save class="manual-path-icon" />
+                                        </button>
+                                        <button
+                                            class="manual-path-button danger"
+                                            type="button"
+                                            :title="t('display.clearDirectory')"
+                                            :disabled="manualPathLoading || !manualLolPath"
+                                            @click="clearManualLolPath"
+                                        >
+                                            <Trash2 class="manual-path-icon" />
+                                        </button>
+                                    </div>
+                                </section>
+                                <div
+                                    v-if="manualPathStatus"
+                                    class="manual-path-status"
+                                    :class="manualPathStatus.type"
+                                >
+                                    {{ manualPathStatus.message }}
+                                    <button
+                                        v-if="manualPathStatus.suggestedPath"
+                                        class="manual-path-suggestion"
+                                        type="button"
+                                        @click="applyManualPathSuggestion"
+                                    >
+                                        {{ t('display.useSuggestedDirectory') }}
+                                    </button>
                                 </div>
                             </div>
-                            <div class="update-actions">
-                                <button
-                                    v-if="showCheckUpdateAction"
-                                    class="update-action"
-                                    type="button"
-                                    :title="t('display.checkUpdate')"
-                                    :disabled="!canCheckUpdate"
-                                    @click="checkAppUpdate"
-                                >
-                                    <RefreshCw class="update-action-icon" :class="{ spinning: updateIsChecking }" />
-                                </button>
-                                <button
-                                    v-if="showInstallUpdateAction"
-                                    class="update-action accent"
-                                    type="button"
-                                    :title="installUpdateTitle"
-                                    :disabled="!canInstallUpdate"
-                                    @click="installAppUpdate"
-                                >
-                                    <RotateCw class="update-action-icon" />
-                                </button>
-                                <button
-                                    v-else-if="showManualDownloadLink"
-                                    class="update-action accent"
-                                    type="button"
-                                    :title="t('display.openDownload')"
-                                    @click="openDownloadUrl"
-                                >
-                                    <Download class="update-action-icon" />
-                                </button>
-                            </div>
-                        </div>
-                        <div v-if="showUpdateProgress" class="update-progress">
-                            <div class="update-progress-track" aria-hidden="true">
-                                <span :style="{ width: updateProgressWidth }"></span>
-                            </div>
-                            <span class="update-progress-text">{{ updateProgressText }}</span>
-                        </div>
-                    </section>
 
-                    <button
-                        class="game-directory-toggle"
-                        type="button"
-                        :aria-expanded="showAdvancedLcuConfig"
-                        @click="toggleAdvancedLcuConfig"
-                    >
-                        <span>{{ t('display.gameDirectory') }}</span>
-                        <ChevronRight
-                            class="game-directory-arrow"
-                            :class="{ open: showAdvancedLcuConfig }"
-                        />
-                    </button>
-                    <p class="game-directory-hint">
-                        {{ t('display.gameDirectoryAdminHint') }}
-                    </p>
+                            <section class="diagnostic-panel">
+                                <div class="section-header">
+                                    <p class="section-kicker">{{ t('display.windowPreview') }}</p>
+                                </div>
 
-                    <section v-if="showAdvancedLcuConfig" class="advanced-lcu-panel">
-                        <div class="manual-path-row">
-                            <input
-                                v-model="manualLolPath"
-                                class="manual-path-input"
-                                type="text"
-                                spellcheck="false"
-                                placeholder="C:\Riot Games\League of Legends"
-                                @blur="validateManualLolPath"
-                            />
-                            <button
-                                class="manual-path-button"
-                                type="button"
-                                :title="t('display.browseDirectory')"
-                                :disabled="manualPathLoading"
-                                @click="browseManualLolPath"
-                            >
-                                <FolderSearch class="manual-path-icon" />
-                            </button>
-                            <button
-                                class="manual-path-button accent"
-                                type="button"
-                                :title="t('display.saveDirectory')"
-                                :disabled="manualPathLoading"
-                                @click="saveManualLolPath"
-                            >
-                                <Save class="manual-path-icon" />
-                            </button>
-                            <button
-                                class="manual-path-button danger"
-                                type="button"
-                                :title="t('display.clearDirectory')"
-                                :disabled="manualPathLoading || !manualLolPath"
-                                @click="clearManualLolPath"
-                            >
-                                <Trash2 class="manual-path-icon" />
-                            </button>
+                                <div class="test-controls">
+                                    <button class="test-btn primary" @click="testFloatingWindow">
+                                        <Target class="icon" />
+                                        <span class="button-copy">
+                                            <span class="text">{{ t('display.augmentOverlay') }}</span>
+                                            <span class="hint">{{ t('display.randomChampionAugments') }}</span>
+                                        </span>
+                                    </button>
+
+                                    <button class="test-btn secondary" @click="testPopupWindow">
+                                        <ClipboardList class="icon" />
+                                        <span class="button-copy">
+                                            <span class="text">{{ t('display.championDetails') }}</span>
+                                            <span class="hint">{{ t('display.randomChampionDetails') }}</span>
+                                        </span>
+                                    </button>
+
+                                    <button class="test-btn warning" @click="testDatabaseLoad">
+                                        <Database class="icon" />
+                                        <span class="button-copy">
+                                            <span class="text">{{ t('display.dataProbe') }}</span>
+                                            <span class="hint">{{ t('display.checkDataLoading') }}</span>
+                                        </span>
+                                    </button>
+                                </div>
+
+                                <div v-if="testStatus" class="test-status" :class="testStatus.type">
+                                    {{ testStatus.message }}
+                                </div>
+                            </section>
                         </div>
-                    </section>
-                    <div
-                        v-if="manualPathStatus"
-                        class="manual-path-status"
-                        :class="manualPathStatus.type"
-                    >
-                        {{ manualPathStatus.message }}
-                        <button
-                            v-if="manualPathStatus.suggestedPath"
-                            class="manual-path-suggestion"
-                            type="button"
-                            @click="applyManualPathSuggestion"
-                        >
-                            {{ t('display.useSuggestedDirectory') }}
-                        </button>
-                    </div>
+                    </main>
+
+                    <footer class="hex-footer">
+                        <p>
+                            {{ t('display.brand') }} v{{ clientVersionLabel }} -
+                            <a class="footer-link" :href="ARAMGG_HOME_URL" @click.prevent="openAramggHome">
+                                {{ ARAMGG_HOME_LABEL }}
+                            </a>
+                            <span class="footer-separator">·</span>
+                            <button class="footer-link footer-action" type="button" @click="openLogDirectory">
+                                {{ t('display.logDirectory') }}
+                            </button>
+                            <span class="footer-separator">·</span>
+                            <a class="footer-link" :href="DATA_API_URL" @click.prevent="openDataApi">
+                                {{ DATA_API_LABEL }}
+                            </a>
+                        </p>
+                        <p class="footer-meta">
+                            <a class="footer-link" :href="GITHUB_URL" @click.prevent="openGithub">
+                                GitHub
+                            </a>
+                            <span class="footer-separator">·</span>
+                            <button class="footer-link footer-action" type="button" @click="openChangelog">
+                                {{ t('display.changelog') }}
+                            </button>
+                        </p>
+                    </footer>
                 </div>
-
-                <AccountAndSharing />
-                <ItemSetInstaller />
-                <OverlayPreferences
-                    @post-game-auto-show-changed="setPostGameShareAutoShowEnabled"
-                />
-                <ChampionMonitor />
-                <MatchHistoryPanel />
-
-                <section class="post-game-panel">
-                    <div class="section-header">
-                        <p class="section-kicker">{{ t('display.postGamePoster') }}</p>
-                    </div>
-                    <button
-                        class="post-game-share-button mock"
-                        type="button"
-                        :disabled="postGameShareLoading"
-                        @click="createMockPostGameSharePoster"
-                    >
-                        <Sparkles class="icon" />
-                        <span class="button-copy">
-                            <span class="text">{{ t('display.mockGenerate') }}</span>
-                            <span class="hint">{{ t('display.refreshPreviewEveryClick') }}</span>
-                        </span>
-                    </button>
-                </section>
-
-                <section class="diagnostic-panel">
-                    <div class="section-header">
-                        <p class="section-kicker">{{ t('display.windowPreview') }}</p>
-                    </div>
-
-                    <div class="test-controls">
-                        <button class="test-btn primary" @click="testFloatingWindow">
-                            <Target class="icon" />
-                            <span class="button-copy">
-                                <span class="text">{{ t('display.augmentOverlay') }}</span>
-                                <span class="hint">{{ t('display.randomChampionAugments') }}</span>
-                            </span>
-                        </button>
-
-                        <button class="test-btn secondary" @click="testPopupWindow">
-                            <ClipboardList class="icon" />
-                            <span class="button-copy">
-                                <span class="text">{{ t('display.championDetails') }}</span>
-                                <span class="hint">{{ t('display.randomChampionDetails') }}</span>
-                            </span>
-                        </button>
-
-                        <button class="test-btn warning" @click="testDatabaseLoad">
-                            <Database class="icon" />
-                            <span class="button-copy">
-                                <span class="text">{{ t('display.dataProbe') }}</span>
-                                <span class="hint">{{ t('display.checkDataLoading') }}</span>
-                            </span>
-                        </button>
-
-                    </div>
-
-                    <div v-if="testStatus" class="test-status" :class="testStatus.type">
-                        {{ testStatus.message }}
-                    </div>
-                </section>
-            </main>
-
-            <footer class="hex-footer">
-                <p>
-                    {{ t('display.brand') }} v{{ clientVersionLabel }} -
-                    <a class="footer-link" :href="ARAMGG_HOME_URL" @click.prevent="openAramggHome">
-                        {{ ARAMGG_HOME_LABEL }}
-                    </a>
-                    <span class="footer-separator">·</span>
-                    <button class="footer-link footer-action" type="button" @click="openLogDirectory">
-                        {{ t('display.logDirectory') }}
-                    </button>
-                    <span class="footer-separator">·</span>
-                    <a class="footer-link" :href="DATA_API_URL" @click.prevent="openDataApi">
-                        {{ DATA_API_LABEL }}
-                    </a>
-                </p>
-                <p class="footer-meta">
-                    <a class="footer-link" :href="GITHUB_URL" @click.prevent="openGithub">
-                        GitHub
-                    </a>
-                    <span class="footer-separator">·</span>
-                    <button class="footer-link footer-action" type="button" @click="openChangelog">
-                        {{ t('display.changelog') }}
-                    </button>
-                </p>
-            </footer>
+            </div>
 
             <div v-if="showQuitConfirm" class="app-modal-overlay" @click.self="cancelQuitApp">
                 <section class="app-modal" role="dialog" aria-modal="true" aria-labelledby="quit-title">
@@ -379,12 +422,13 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, markRaw, onBeforeUnmount, onMounted, ref } from 'vue'
 import ItemSetInstaller from './ItemSetInstaller.vue'
 import AccountAndSharing from './AccountAndSharing.vue'
 import OverlayPreferences from './OverlayPreferences.vue'
 import ChampionMonitor from './ChampionMonitor.vue'
 import MatchHistoryPanel from './MatchHistoryPanel.vue'
+import LobbyStatsPanel from './LobbyStatsPanel.vue'
 import PostGameShareModal from './PostGameShareModal.vue'
 import {
     Select,
@@ -399,6 +443,7 @@ import { electronAPI } from '../native/electron-api.ts'
 import { trackAnalyticsEvent } from '../services/analytics.ts'
 import { useI18n } from 'vue-i18n'
 import {
+    ChevronLeft,
     ChevronRight,
     ClipboardList,
     Cpu,
@@ -407,14 +452,19 @@ import {
     FolderSearch,
     Languages,
     Minus,
+    PanelLeft,
     RefreshCw,
     RotateCw,
     Save,
     ScrollText,
+    Settings,
     Share2,
     Sparkles,
+    Swords,
     Target,
     Trash2,
+    TrendingUp,
+    User,
     X,
 } from 'lucide-vue-next'
 
@@ -442,6 +492,39 @@ const DATA_API_LABEL = computed(() => t('display.openApi'))
 const GITHUB_URL = 'https://github.com/valkia/aramgg_client'
 let removeQuitConfirmListener = null
 let removeLocaleChangedListener = null
+let removePhaseListener = null
+
+const lcuConnected = ref(false)
+
+const navItems = [
+    { id: 'aram-tools', label: '大乱斗工具', icon: markRaw(Swords) },
+    { id: 'match-history', label: '战绩中心', icon: markRaw(TrendingUp) },
+    { id: 'user-center', label: '用户中心', icon: markRaw(User) },
+    { id: 'settings', label: '设置', icon: markRaw(Settings) },
+]
+
+const activeNav = ref('aram-tools')
+const sidebarCollapsed = ref(false)
+const navInitialized = ref(false)
+
+const currentNavLabel = computed(() => {
+    const item = navItems.find(item => item.id === activeNav.value)
+    return item ? item.label : ''
+})
+
+const selectNav = (id) => {
+    activeNav.value = id
+    if (navInitialized.value) {
+        electronAPI.store.set('ui.activeNavSection', id).catch(() => {})
+    }
+}
+
+const toggleSidebar = () => {
+    sidebarCollapsed.value = !sidebarCollapsed.value
+    if (navInitialized.value) {
+        electronAPI.store.set('ui.sidebarCollapsed', sidebarCollapsed.value).catch(() => {})
+    }
+}
 
 const clientVersionLabel = computed(() => {
     if (!versionInfo.value) {
@@ -935,9 +1018,34 @@ const quitApp = async () => {
     }
 }
 
-onMounted(() => {
+const checkLcuConnection = async () => {
+    try {
+        const result = await electronAPI.lcu.getGameflowPhase()
+        lcuConnected.value = !!result?.success
+    } catch {
+        lcuConnected.value = false
+    }
+}
+
+onMounted(async () => {
+    try {
+        const savedNav = await electronAPI.store.get('ui.activeNavSection')
+        if (savedNav && typeof savedNav === 'string') {
+            activeNav.value = savedNav
+        }
+        const savedCollapsed = await electronAPI.store.get('ui.sidebarCollapsed')
+        if (typeof savedCollapsed === 'boolean') {
+            sidebarCollapsed.value = savedCollapsed
+        }
+    } catch {
+        // ignore store errors
+    }
+    navInitialized.value = true
+
     void loadLocale().finally(() => loadVersionInfo())
     loadManualLolPath()
+    checkLcuConnection()
+    const lcuCheckInterval = setInterval(checkLcuConnection, 5000)
     removeQuitConfirmListener = electronAPI.events.on('quit-confirm-requested', confirmQuitApp)
     removeLocaleChangedListener = electronAPI.events.on('locale-changed', ({ locale } = {}) => {
         if (locale) {
@@ -946,13 +1054,19 @@ onMounted(() => {
             loadVersionInfo()
         }
     })
-})
+    removePhaseListener = electronAPI.events.on('game-phase-changed', () => {
+        lcuConnected.value = true
+    })
 
-onBeforeUnmount(() => {
-    removeQuitConfirmListener?.()
-    removeQuitConfirmListener = null
-    removeLocaleChangedListener?.()
-    removeLocaleChangedListener = null
+    onBeforeUnmount(() => {
+        clearInterval(lcuCheckInterval)
+        removeQuitConfirmListener?.()
+        removeQuitConfirmListener = null
+        removeLocaleChangedListener?.()
+        removeLocaleChangedListener = null
+        removePhaseListener?.()
+        removePhaseListener = null
+    })
 })
 </script>
 
@@ -970,8 +1084,8 @@ onBeforeUnmount(() => {
 }
 
 .hex-window {
-    width: min(440px, 100%);
-    height: min(720px, calc(100dvh - 32px));
+    width: min(960px, 100%);
+    height: min(760px, calc(100dvh - 32px));
     min-height: 480px;
     position: relative;
     display: flex;
@@ -1024,8 +1138,7 @@ onBeforeUnmount(() => {
 }
 
 .brand-lockup,
-.window-controls,
-.status-row {
+.window-controls {
     display: flex;
     align-items: center;
 }
@@ -1088,68 +1201,185 @@ onBeforeUnmount(() => {
     height: 16px;
 }
 
-.hex-scroll {
+.hex-body {
     position: relative;
     z-index: 1;
     flex: 1;
     display: flex;
-    flex-direction: column;
-    gap: 12px;
     min-height: 0;
-    overflow-y: auto;
-    padding: 16px;
-    background:
-        radial-gradient(circle at 50% 0%, rgba(194, 156, 109, 0.08), transparent 60%),
-        rgba(8, 21, 30, 0.58);
+    overflow: hidden;
 }
 
-.hex-scroll > * {
+.sidebar {
+    flex: 0 0 172px;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid rgba(226, 192, 143, 0.18);
+    background: rgba(10, 20, 28, 0.72);
+    transition: flex-basis 180ms ease;
+    overflow: hidden;
+}
+
+.sidebar.collapsed {
+    flex: 0 0 52px;
+}
+
+.sidebar-toggle {
+    width: 100%;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-bottom: 1px solid rgba(226, 192, 143, 0.12);
+    background: transparent;
+    color: #859491;
+    cursor: pointer;
+    transition: color 120ms ease, background 120ms ease;
+}
+
+.sidebar-toggle:hover {
+    color: #e2c08f;
+    background: rgba(226, 192, 143, 0.06);
+}
+
+.toggle-icon {
+    width: 16px;
+    height: 16px;
+}
+
+.nav-list {
+    list-style: none;
+    margin: 0;
+    padding: 8px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #bacac6;
+    transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+    border: 1px solid transparent;
+    min-height: 40px;
+}
+
+.nav-item:hover {
+    color: #e2c08f;
+    background: rgba(226, 192, 143, 0.06);
+    border-color: rgba(226, 192, 143, 0.14);
+}
+
+.nav-item.active {
+    color: #e2c08f;
+    background: rgba(194, 156, 109, 0.12);
+    border-color: rgba(226, 192, 143, 0.28);
+}
+
+.nav-icon {
+    width: 18px;
+    height: 18px;
     flex: 0 0 auto;
 }
 
-.status-strip,
-.diagnostic-panel {
-    border: 1px solid var(--lol-border-soft);
-    border-radius: 4px;
-    background:
-        linear-gradient(145deg, rgba(31, 43, 53, 0.62), rgba(7, 10, 13, 0.32));
-    box-shadow: inset 0 0 18px rgba(194, 156, 109, 0.04);
+.nav-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 800;
 }
 
-.status-strip {
-    padding: 12px;
+.sidebar.collapsed .nav-item {
+    justify-content: center;
+    padding: 10px 0;
 }
 
-.status-header {
+.content-area {
+    flex: 1;
     display: flex;
-    align-items: flex-start;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.content-header {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 12px;
+    padding: 10px 16px;
+    background: rgba(42, 54, 64, 0.72);
+    border-bottom: 1px solid rgba(226, 192, 143, 0.18);
+    -webkit-app-region: drag;
 }
 
-.status-header h2 {
-    margin: 4px 0 0;
-    color: var(--lol-ivory);
-    font-size: 18px;
+.header-left {
+    min-width: 0;
+}
+
+.content-header h2 {
+    margin: 0;
+    color: #e2c08f;
+    font-size: 16px;
     font-weight: 900;
     line-height: 1.2;
 }
 
-.status-grid span {
-    color: #bacac6;
-    font-size: 11px;
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    -webkit-app-region: no-drag;
 }
 
-.status-grid strong {
-    color: #e2c08f;
-    font-size: 12px;
-    letter-spacing: 0;
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid rgba(60, 74, 71, 0.42);
+    background: rgba(4, 15, 24, 0.42);
+    font-size: 11px;
+    font-weight: 800;
+    color: #bacac6;
+    white-space: nowrap;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+}
+
+.status-indicator.online .status-dot {
+    background: #54d884;
+    box-shadow: 0 0 6px rgba(84, 216, 132, 0.5);
+}
+
+.status-indicator.offline .status-dot {
+    background: #859491;
+}
+
+.status-indicator.online {
+    border-color: rgba(84, 216, 132, 0.24);
+    color: #54d884;
 }
 
 .header-locale-trigger {
-    width: 132px;
-    height: 40px;
+    width: 128px;
+    height: 34px;
     position: relative;
     flex: 0 0 auto;
     justify-content: flex-start;
@@ -1289,6 +1519,44 @@ onBeforeUnmount(() => {
     text-transform: uppercase;
 }
 
+.content-scroll {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px;
+    background:
+        radial-gradient(circle at 50% 0%, rgba(194, 156, 109, 0.08), transparent 60%),
+        rgba(8, 21, 30, 0.58);
+}
+
+.content-scroll > * {
+    flex: 0 0 auto;
+}
+
+.nav-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.status-strip,
+.diagnostic-panel {
+    border: 1px solid rgba(226, 195, 132, 0.12);
+    border-radius: 4px;
+    background:
+        linear-gradient(145deg, rgba(31, 43, 53, 0.62), rgba(7, 10, 13, 0.32));
+    box-shadow: inset 0 0 18px rgba(194, 156, 109, 0.04);
+}
+
+.status-strip {
+    padding: 12px;
+}
+
 .status-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1313,29 +1581,21 @@ onBeforeUnmount(() => {
     white-space: nowrap;
 }
 
+.status-grid span {
+    color: #bacac6;
+    font-size: 11px;
+}
+
+.status-grid strong {
+    color: #e2c08f;
+    font-size: 12px;
+    letter-spacing: 0;
+}
+
 .status-grid small {
     margin-top: 3px;
     color: #859491;
     font-size: 10px;
-}
-
-.version-download {
-    max-width: 100%;
-    margin-top: 5px;
-    padding: 3px 6px;
-    border: 1px solid rgba(226, 192, 143, 0.35);
-    border-radius: 4px;
-    background: rgba(194, 156, 109, 0.12);
-    color: #e2c08f;
-    font-size: 10px;
-    font-weight: 800;
-    line-height: 1.2;
-    cursor: pointer;
-}
-
-.version-download:hover {
-    border-color: rgba(226, 192, 143, 0.58);
-    background: rgba(194, 156, 109, 0.2);
 }
 
 .update-panel {
@@ -1482,13 +1742,8 @@ onBeforeUnmount(() => {
 }
 
 @keyframes update-spin {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 .lcu-status-card {
@@ -1563,7 +1818,7 @@ onBeforeUnmount(() => {
     border: 1px solid rgba(244, 236, 220, 0.1);
     border-radius: 4px;
     background: rgba(7, 10, 13, 0.52);
-    color: var(--lol-ivory);
+    color: #d7e4f1;
     font-size: 12px;
     outline: none;
 }
@@ -1664,7 +1919,9 @@ onBeforeUnmount(() => {
 
 .post-game-panel {
     padding: 14px;
-    border-top: 1px solid rgba(244, 236, 220, 0.06);
+    border: 1px solid rgba(60, 74, 71, 0.42);
+    border-radius: 4px;
+    background: rgba(31, 43, 53, 0.42);
 }
 
 .post-game-share-button {
@@ -1899,10 +2156,6 @@ onBeforeUnmount(() => {
     border-color: rgba(226, 195, 132, 0.44);
 }
 
-.test-btn.danger:hover {
-    border-color: rgba(255, 180, 171, 0.44);
-}
-
 .test-btn .icon {
     width: 18px;
     height: 18px;
@@ -1911,11 +2164,7 @@ onBeforeUnmount(() => {
 }
 
 .test-btn.warning .icon {
-    color: var(--lol-gold-2);
-}
-
-.test-btn.danger .icon {
-    color: #ffb4ab;
+    color: #e2c384;
 }
 
 .button-copy {
@@ -2055,7 +2304,7 @@ onBeforeUnmount(() => {
 
 .app-modal-copy h2 {
     margin: 0;
-    color: var(--lol-ivory);
+    color: #d7e4f1;
     font-size: 17px;
     font-weight: 900;
     line-height: 1.2;
@@ -2089,13 +2338,13 @@ onBeforeUnmount(() => {
 }
 
 .app-modal-action.secondary {
-    border: 1px solid var(--lol-border-soft);
+    border: 1px solid rgba(244, 236, 220, 0.08);
     background: rgba(7, 10, 13, 0.42);
-    color: var(--lol-ivory);
+    color: #d7e4f1;
 }
 
 .app-modal-action.secondary:hover {
-    color: var(--lol-primary-2);
+    color: #e2c08f;
     border-color: rgba(194, 156, 109, 0.38);
 }
 
@@ -2107,8 +2356,8 @@ onBeforeUnmount(() => {
 
 .app-modal-action.danger:hover {
     border-color: rgba(226, 192, 143, 0.58);
-    background: linear-gradient(135deg, var(--lol-primary-2), var(--lol-primary));
-    color: var(--lol-bg);
+    background: linear-gradient(135deg, rgba(226, 192, 143, 0.8), rgba(194, 156, 109, 0.6));
+    color: #08151e;
 }
 
 .changelog-modal {
@@ -2143,7 +2392,7 @@ onBeforeUnmount(() => {
 
 .changelog-modal-header h2 {
     margin: 0;
-    color: var(--lol-ivory);
+    color: #d7e4f1;
     font-size: 17px;
     font-weight: 900;
     line-height: 1.2;
@@ -2157,15 +2406,15 @@ onBeforeUnmount(() => {
     max-height: min(430px, 62dvh);
     min-height: 0;
     overflow-y: auto;
-    padding-right: 3px;
     display: flex;
     flex-direction: column;
     gap: 10px;
+    padding: 0 2px 4px;
 }
 
 .changelog-entry {
-    padding: 10px 11px;
-    border: 1px solid rgba(244, 236, 220, 0.07);
+    padding: 12px;
+    border: 1px solid rgba(244, 236, 220, 0.06);
     border-radius: 4px;
     background: rgba(4, 15, 24, 0.42);
 }
@@ -2179,155 +2428,75 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: 8px;
+    margin-bottom: 6px;
 }
 
 .changelog-entry-title {
-    min-width: 0;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    min-width: 0;
 }
 
 .changelog-entry-title strong {
     color: #e2c08f;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 900;
-    line-height: 1.2;
 }
 
 .changelog-current {
-    padding: 2px 5px;
-    border: 1px solid rgba(226, 192, 143, 0.28);
+    padding: 2px 6px;
+    border: 1px solid rgba(226, 192, 143, 0.36);
     border-radius: 4px;
-    background: rgba(194, 156, 109, 0.12);
+    background: rgba(194, 156, 109, 0.14);
     color: #e2c08f;
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 900;
-    line-height: 1.2;
+    line-height: 1;
 }
 
 .changelog-date {
-    flex: 0 0 auto;
     color: #859491;
-    font-size: 10px;
-    font-weight: 800;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
 }
 
 .changelog-entry h3 {
-    margin: 8px 0 0;
+    margin: 0 0 4px;
     color: #d7e4f1;
     font-size: 13px;
-    font-weight: 900;
+    font-weight: 800;
     line-height: 1.3;
 }
 
 .changelog-entry p {
-    margin: 6px 0 0;
+    margin: 0;
     color: #bacac6;
     font-size: 12px;
-    line-height: 1.45;
+    line-height: 1.5;
 }
 
 .changelog-changes {
     margin: 8px 0 0;
-    padding: 0;
-    list-style: none;
+    padding: 0 0 0 18px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
 }
 
 .changelog-changes li {
-    position: relative;
-    padding-left: 12px;
-    color: #d7e4f1;
-    font-size: 12px;
+    color: #bacac6;
+    font-size: 11px;
     line-height: 1.45;
-}
-
-.changelog-changes li::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0.6em;
-    width: 4px;
-    height: 4px;
-    border-radius: 4px;
-    background: #e2c08f;
 }
 
 .changelog-empty {
     margin: 0;
-    padding: 16px;
-    border: 1px solid rgba(244, 236, 220, 0.07);
-    border-radius: 4px;
-    background: rgba(4, 15, 24, 0.42);
     color: #859491;
     font-size: 12px;
     text-align: center;
-}
-
-.changelog-list::-webkit-scrollbar {
-    width: 6px;
-}
-
-.changelog-list::-webkit-scrollbar-track {
-    background: rgba(4, 15, 24, 0.55);
-}
-
-.changelog-list::-webkit-scrollbar-thumb {
-    border-radius: 4px;
-    background: rgba(226, 195, 132, 0.48);
-}
-
-.footer-link {
-    color: #e2c08f;
-    text-decoration: underline;
-    text-underline-offset: 2px;
-    cursor: pointer;
-}
-
-.footer-link:hover {
-    color: #f4ecdc;
-}
-
-.footer-action {
-    padding: 0;
-    border: 0;
-    background: transparent;
-    font: inherit;
-}
-
-.hex-scroll::-webkit-scrollbar {
-    width: 8px;
-}
-
-.hex-scroll::-webkit-scrollbar-track {
-    background: rgba(4, 15, 24, 0.65);
-}
-
-.hex-scroll::-webkit-scrollbar-thumb {
-    border: 2px solid rgba(4, 15, 24, 0.85);
-    border-radius: 4px;
-    background: linear-gradient(180deg, rgba(226, 195, 132, 0.72), rgba(226, 192, 143, 0.48));
-}
-
-@media (max-width: 460px) {
-    .display-page {
-        padding: 0;
-    }
-
-    .hex-window {
-        width: 100%;
-        height: 100dvh;
-        border-radius: 0;
-        border-left: none;
-        border-right: none;
-    }
-
-    .test-controls {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
+    padding: 24px;
 }
 </style>

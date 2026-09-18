@@ -30,6 +30,8 @@ export interface LCUUrls {
   position2: string
   gameflowPhase: string
   gameflowSession: string
+  lobby: string
+  benchSwap: string
 }
 
 /** 只读选人快照状态 */
@@ -143,6 +145,23 @@ export interface ChampionIdResult {
   success: boolean
   championId: number | null
   error?: string
+}
+
+/** 组队大厅成员信息 */
+export interface LobbyMember {
+  puuid?: string
+  summonerId?: number
+  summonerName?: string
+  gameName?: string
+  riotId?: string
+  [key: string]: unknown
+}
+
+/** 组队大厅信息 */
+export interface LobbyData {
+  members?: LobbyMember[]
+  queueId?: number
+  [key: string]: unknown
 }
 
 /** Token 加载结果（三元组） */

@@ -29,6 +29,8 @@ const validEvents = new Set<ElectronEventChannel>([
   'locale-changed',
   'match-history-updated',
   'teammate-winrate-updated',
+  'lobby-stats-updated',
+  'bench-swap-result',
 ])
 
 function assertValidEvent(channel: string): asserts channel is ElectronEventChannel {
@@ -148,6 +150,8 @@ const electronAPI: ElectronAPI = {
     validateManualLeaguePath: (lolPath) => ipcRenderer.invoke('lcu-validate-manual-league-path', lolPath),
     setManualLeaguePath: (lolPath) => ipcRenderer.invoke('lcu-set-manual-league-path', lolPath),
     clearManualLeaguePath: () => ipcRenderer.invoke('lcu-clear-manual-league-path'),
+    benchSwap: (championId) => ipcRenderer.invoke('lcu-bench-swap', championId),
+    getLobbyStats: () => ipcRenderer.invoke('lcu-get-lobby-stats'),
   },
   diagnostics: {
     testShowFloating: (data) => ipcRenderer.invoke('test-show-floating', data),

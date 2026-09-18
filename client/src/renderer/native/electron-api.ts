@@ -101,6 +101,8 @@ export const electronAPI: ElectronAPI = {
       requireElectronAPI().lcu.validateManualLeaguePath(...args),
     setManualLeaguePath: (...args) => requireElectronAPI().lcu.setManualLeaguePath(...args),
     clearManualLeaguePath: (...args) => requireElectronAPI().lcu.clearManualLeaguePath(...args),
+    benchSwap: (...args) => requireElectronAPI().lcu.benchSwap(...args),
+    getLobbyStats: (...args) => requireElectronAPI().lcu.getLobbyStats(...args),
   },
   diagnostics: {
     testShowFloating: (...args) => requireElectronAPI().diagnostics.testShowFloating(...args),

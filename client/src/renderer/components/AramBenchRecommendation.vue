@@ -88,6 +88,20 @@
                                 <div>{{ t('bench.pickRate', { value: formatPercent(candidate.pickRate) }) }}</div>
                             </div>
                         </div>
+                        <button
+                            v-if="!candidate.isCurrent"
+                            class="swap-btn"
+                            type="button"
+                            :disabled="swapInFlight === candidate.championId"
+                            :title="swapInFlight === candidate.championId ? '换英雄中...' : '无CD换英雄'"
+                            @click.stop="swapChampion(candidate.championId)"
+                        >
+                            <ArrowLeftRight
+                                class="swap-icon"
+                                :class="{ spinning: swapInFlight === candidate.championId }"
+                            />
+                            <span class="swap-label">换</span>
+                        </button>
                     </article>
                 </div>
                 <button
@@ -107,6 +121,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
+    ArrowLeftRight,
     ChevronLeft,
     ChevronRight,
     CircleAlert,
@@ -140,6 +155,7 @@ const requestInFlight = ref(false)
 const candidateListRef = ref(null)
 const canScrollLeft = ref(false)
 const canScrollRight = ref(false)
+const swapInFlight = ref(0)
 const unsubscribeEvents = []
 const BENCH_REFRESH_TIMEOUT_MS = 8 * 1000
 let mounted = false
@@ -265,6 +281,21 @@ const candidateSourceLabel = (candidate) =>
 const formatPercent = (value) => {
     if (value == null || Number.isNaN(Number(value))) return '--'
     return `${(Number(value) * 100).toFixed(1)}%`
+}
+
+const swapChampion = async (championId) => {
+    if (!hasElectronAPI() || swapInFlight.value) return
+    swapInFlight.value = championId
+    try {
+        const result = await electronAPI.lcu.benchSwap(championId)
+        if (result?.success) {
+            await refresh(false)
+        }
+    } catch {
+        // silently ignore — the swap is best-effort
+    } finally {
+        swapInFlight.value = 0
+    }
 }
 
 const updateCandidateScrollState = () => {
@@ -649,6 +680,42 @@ h3 {
     flex: 1;
 }
 
+.swap-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 8px;
+    border: 1px solid rgba(226, 192, 143, 0.36);
+    border-radius: 4px;
+    background: rgba(194, 156, 109, 0.12);
+    color: #e2c08f;
+    font-size: 11px;
+    font-weight: 900;
+    cursor: pointer;
+    transition: background 120ms ease-out, border-color 120ms ease-out;
+}
+
+.swap-btn:hover:not(:disabled) {
+    background: rgba(194, 156, 109, 0.22);
+    border-color: rgba(226, 192, 143, 0.6);
+    color: #f4ecdc;
+}
+
+.swap-btn:disabled {
+    opacity: 0.5;
+    cursor: wait;
+}
+
+.swap-icon {
+    width: 13px;
+    height: 13px;
+}
+
+.swap-label {
+    line-height: 1;
+}
+
 .candidate-title {
     gap: 8px;
     min-width: 0;
@@ -787,6 +854,17 @@ h3 {
 
 .aram-panel.compact .candidate-title {
     margin-bottom: 0;
+}
+
+.aram-panel.compact .swap-btn {
+    padding: 3px 6px;
+    font-size: 10px;
+    justify-self: center;
+}
+
+.aram-panel.compact .swap-icon {
+    width: 11px;
+    height: 11px;
 }
 
 .aram-panel.compact .stat-line {

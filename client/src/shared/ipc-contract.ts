@@ -9,6 +9,8 @@ export type AppStoreKey =
   | 'augments.showTopOverlay'
   | 'augments.showSidePanel'
   | 'postGameShare.autoShow'
+  | 'ui.activeNavSection'
+  | 'ui.sidebarCollapsed'
 
 export type SupportedDataLocale = 'zh-CN' | 'zh-TW' | 'en-US'
 
@@ -347,6 +349,49 @@ export interface MatchHistoryUpdatedPayload {
   updatedAt: number
 }
 
+export interface TeammateWinrateEntry {
+  cellId: number
+  name: string
+  championId: number
+  wins: number
+  games: number
+  winRate: number | null
+  avgKills: number
+  avgDeaths: number
+  avgAssists: number
+  kda: number | null
+  score: number | null
+}
+
+export interface TeammateWinratePayload {
+  queueId: number
+  entries: TeammateWinrateEntry[]
+  updatedAt: number
+}
+
+export interface LobbyMemberStats {
+  puuid: string
+  name: string
+  wins: number
+  games: number
+  winRate: number | null
+  avgKills: number
+  avgDeaths: number
+  avgAssists: number
+  kda: number | null
+  score: number | null
+}
+
+export interface LobbyStatsPayload {
+  queueId: number
+  members: LobbyMemberStats[]
+  updatedAt: number
+}
+
+export interface BenchSwapResult extends OperationResult {
+  championId?: number
+}
+
 export interface ElectronEventMap {
   fromMain: [payload?: unknown]
   'for-popup': [payload: OverlayPayload]
@@ -370,11 +415,9 @@ export interface ElectronEventMap {
   'app-update-status-changed': [payload: AppUpdateState]
   'locale-changed': [payload: LocaleChangedPayload]
   'match-history-updated': [payload: MatchHistoryUpdatedPayload]
-  'teammate-winrate-updated': [payload: {
-    queueId: number
-    entries: Array<{ cellId: number; name: string; championId: number; wins: number; games: number; winRate: number | null }>
-    updatedAt: number
-  }]
+  'teammate-winrate-updated': [payload: TeammateWinratePayload]
+  'lobby-stats-updated': [payload: LobbyStatsPayload]
+  'bench-swap-result': [payload: BenchSwapResult]
 }
 
 export type ElectronEventChannel = keyof ElectronEventMap
@@ -466,6 +509,8 @@ export interface ElectronAPI {
     validateManualLeaguePath(lolPath: string): Promise<LooseRecord>
     setManualLeaguePath(lolPath: string): Promise<LooseRecord>
     clearManualLeaguePath(): Promise<LooseRecord>
+    benchSwap(championId: number): Promise<BenchSwapResult>
+    getLobbyStats(): Promise<OperationResult & { data?: LobbyStatsPayload }>
   }
   diagnostics: {
     testShowFloating(data: LooseRecord): Promise<OperationResult>

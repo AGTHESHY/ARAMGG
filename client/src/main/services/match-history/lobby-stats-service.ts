@@ -1,12 +1,11 @@
-import type { ChampSelectSnapshot, TeamMember } from '../../../shared/ipc-contract.ts'
 import type LCUService from '../lcu/lcu-service.ts'
+import type { LobbyData, LobbyMember } from '../lcu/types.ts'
 import { normalizeGame } from './local-match-history-service.ts'
 import { SgpMatchHistoryService } from './sgp-match-history-service.ts'
 
-export interface TeammateWinrateEntry {
-  cellId: number
+export interface LobbyMemberStats {
+  puuid: string
   name: string
-  championId: number
   wins: number
   games: number
   winRate: number | null
@@ -17,9 +16,9 @@ export interface TeammateWinrateEntry {
   score: number | null
 }
 
-export interface TeammateWinratePayload {
+export interface LobbyStatsPayload {
   queueId: number
-  entries: TeammateWinrateEntry[]
+  members: LobbyMemberStats[]
   updatedAt: number
 }
 
@@ -27,9 +26,13 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function memberPuuid(member: TeamMember): string {
+function memberPuuid(member: LobbyMember): string {
   const value = text(member.puuid)
   return /^[a-zA-Z0-9_-]{8,128}$/.test(value) ? value : ''
+}
+
+function memberName(member: LobbyMember): string {
+  return text(member.gameName) || text(member.summonerName) || text(member.riotId) || '未知玩家'
 }
 
 function computeKda(kills: number, deaths: number, assists: number): number | null {
@@ -47,28 +50,22 @@ function computeScore(winRate: number | null, kda: number | null): number | null
   return Math.max(3.0, Math.min(16.0, Math.round(raw * 10) / 10))
 }
 
-export async function queryTeammateWinrates(
+export async function queryLobbyMemberStats(
   lcuService: LCUService,
-  snapshot: ChampSelectSnapshot,
+  lobby: LobbyData,
   count = 50,
-): Promise<TeammateWinratePayload> {
-  const queueId = Number(snapshot.champSelectSession?.queueId) || 0
+): Promise<LobbyStatsPayload> {
+  const queueId = Number(lobby.queueId) || 0
   const currentSummoner = await lcuService.getCurrentSummoner()
   const platformId = text(currentSummoner?.platformId || currentSummoner?.currentPlatformId).toUpperCase()
-  const teammates = snapshot.myTeam.filter(member => member.cellId !== snapshot.localPlayerCellId)
+  const members = Array.isArray(lobby.members) ? lobby.members : []
   const sgp = new SgpMatchHistoryService(lcuService)
   const updatedAt = Date.now()
-  const entries = await Promise.all(teammates.map(async member => {
+
+  const stats = await Promise.all(members.map(async member => {
     const puuid = memberPuuid(member)
-    const name = text(member.gameName) || text(member.summonerName) || `队友 ${member.cellId + 1}`
-    const base = {
-      cellId: member.cellId,
-      name,
-      championId: Number(member.championId) || 0,
-      avgKills: 0,
-      avgDeaths: 0,
-      avgAssists: 0,
-    }
+    const name = memberName(member)
+    const base = { puuid, name, avgKills: 0, avgDeaths: 0, avgAssists: 0 }
     if (!puuid) return { ...base, wins: 0, games: 0, winRate: null, kda: null, score: null }
     try {
       const rawGames = await sgp.getSummaries(puuid, platformId, 0, count, queueId)
@@ -98,5 +95,6 @@ export async function queryTeammateWinrates(
       return { ...base, wins: 0, games: 0, winRate: null, kda: null, score: null }
     }
   }))
-  return { queueId, entries, updatedAt }
+
+  return { queueId, members: stats, updatedAt }
 }
