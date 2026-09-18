@@ -65,6 +65,8 @@ import {
     shouldShowChampionDetails,
     shouldShowAugmentSidePanel,
     shouldShowAugmentTopOverlay,
+    shouldShowTeammateWinrate,
+    shouldShowLobbyStats,
 } from './user-preferences.ts'
 import { GameSessionCoordinator } from '../services/game-session/game-session-machine.ts'
 import { shouldRaiseOverlayWindow } from './overlay-window-state.ts'
@@ -830,6 +832,7 @@ async function pollChampSelectSnapshot(lcuService, reason, forceShow = false) {
 }
 
 async function showTeammateWinrates(lcuService, snapshot) {
+    if (!shouldShowTeammateWinrate()) return
     const queueId = Number(snapshot?.champSelectSession?.queueId) || 0
     const signature = `${queueId}:${(snapshot?.myTeam || []).map(member => member.puuid || member.summonerId || member.cellId).join(',')}`
     if (!signature || signature === lastTeammateWinrateSignature) return
@@ -853,6 +856,7 @@ async function showTeammateWinrates(lcuService, snapshot) {
 }
 
 async function showLobbyStats(lcuService) {
+    if (!shouldShowLobbyStats()) return
     try {
         const lobby = await lcuService.getLobby()
         if (!lobby) {

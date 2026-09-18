@@ -103,6 +103,13 @@ export const electronAPI: ElectronAPI = {
     clearManualLeaguePath: (...args) => requireElectronAPI().lcu.clearManualLeaguePath(...args),
     benchSwap: (...args) => requireElectronAPI().lcu.benchSwap(...args),
     getLobbyStats: (...args) => requireElectronAPI().lcu.getLobbyStats(...args),
+    getOwnedSkins: (...args) => requireElectronAPI().lcu.getOwnedSkins(...args),
+    getChampionList: (...args) => requireElectronAPI().lcu.getChampionList(...args),
+    getChampionSkins: (...args) => requireElectronAPI().lcu.getChampionSkins(...args),
+    setMySelectionSkin: (...args) => requireElectronAPI().lcu.setMySelectionSkin(...args),
+    getDecorations: (...args) => requireElectronAPI().lcu.getDecorations(...args),
+    getPartySkins: (...args) => requireElectronAPI().lcu.getPartySkins(...args),
+    setSummonerEmote: (...args) => requireElectronAPI().lcu.setSummonerEmote(...args),
   },
   diagnostics: {
     testShowFloating: (...args) => requireElectronAPI().diagnostics.testShowFloating(...args),

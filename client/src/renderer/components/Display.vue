@@ -106,6 +106,7 @@
                         <!-- 战绩中心 -->
                         <div v-if="activeNav === 'match-history'" class="nav-section">
                             <MatchHistoryPanel />
+                            <MatchPreferences />
                             <section class="post-game-panel">
                                 <div class="section-header">
                                     <p class="section-kicker">{{ t('display.postGamePoster') }}</p>
@@ -123,6 +124,11 @@
                                     </span>
                                 </button>
                             </section>
+                        </div>
+
+                        <!-- 皮肤中心 -->
+                        <div v-if="activeNav === 'skin-center'" class="nav-section">
+                            <SkinCenter />
                         </div>
 
                         <!-- 用户中心 -->
@@ -420,6 +426,8 @@ import AccountAndSharing from './AccountAndSharing.vue'
 import OverlayPreferences from './OverlayPreferences.vue'
 import ChampionMonitor from './ChampionMonitor.vue'
 import MatchHistoryPanel from './MatchHistoryPanel.vue'
+import MatchPreferences from './MatchPreferences.vue'
+import SkinCenter from './SkinCenter.vue'
 import LobbyStatsPanel from './LobbyStatsPanel.vue'
 import PostGameShareModal from './PostGameShareModal.vue'
 import {
@@ -451,6 +459,7 @@ import {
     ScrollText,
     Settings,
     Share2,
+    Shirt,
     Sparkles,
     Swords,
     Target,
@@ -487,6 +496,7 @@ const lcuConnected = ref(false)
 const navItems = [
     { id: 'aram-tools', label: '大乱斗工具', icon: markRaw(Swords) },
     { id: 'match-history', label: '战绩中心', icon: markRaw(TrendingUp) },
+    { id: 'skin-center', label: '皮肤中心', icon: markRaw(Shirt) },
     { id: 'user-center', label: '用户中心', icon: markRaw(User) },
     { id: 'settings', label: '设置', icon: markRaw(Settings) },
 ]

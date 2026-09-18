@@ -9,10 +9,10 @@
         v-for="entry in payload?.entries"
         :key="entry.cellId"
         class="teammate-card"
-        :class="tierClass(entry.winRate)"
+        :class="particleEffects ? tierClass(entry.winRate) : ''"
         @click="onTeammateClick(entry)"
       >
-        <div class="tier-glow" :class="tierClass(entry.winRate)"></div>
+        <div v-if="particleEffects" class="tier-glow" :class="tierClass(entry.winRate)"></div>
         <div class="card-head">
           <span class="name">{{ entry.name }}</span>
           <span class="score" v-if="entry.score != null">{{ entry.score.toFixed(1) }}</span>
@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { LoaderCircle } from 'lucide-vue-next'
 import type { ElectronEventMap } from '../../shared/ipc-contract.ts'
 import { electronAPI, hasElectronAPI } from '../native/electron-api.ts'
@@ -55,6 +55,17 @@ type Entry = Payload['entries'][number]
 const payload = ref<Payload | null>(null)
 const visible = ref(false)
 const swapping = ref(false)
+const particleEffects = ref(true)
+
+const loadParticleEffectsPref = async () => {
+  if (!hasElectronAPI()) return
+  try {
+    const value = await electronAPI.store.get('teammateWinrate.particleEffects')
+    particleEffects.value = value != null ? Boolean(value) : true
+  } catch {
+    // keep default
+  }
+}
 
 function formatRate(value: number | null): string {
   return value == null ? '—' : `${Math.round(value * 100)}%`
@@ -112,6 +123,7 @@ const unsubscribePhase = electronAPI.events.on('game-phase-changed', data => {
 })
 
 onBeforeUnmount(() => { unsubscribeUpdate(); unsubscribePhase() })
+onMounted(loadParticleEffectsPref)
 </script>
 
 <style scoped>

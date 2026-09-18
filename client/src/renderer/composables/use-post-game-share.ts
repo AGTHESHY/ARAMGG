@@ -87,6 +87,7 @@ export function usePostGameShare(statusSink: Ref<StatusMessage | null>) {
 
   const closePostGameShare = () => {
     showPostGameShare.value = false
+    postGamePoster.value = null
   }
 
   const setPostGameShareAutoShowEnabled = (enabled: boolean) => {

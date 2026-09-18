@@ -6,6 +6,9 @@ export const USER_PREFERENCE_KEYS = {
     championInsightAlwaysOnTop: 'championInsight.alwaysOnTop',
     showAugmentTopOverlay: 'augments.showTopOverlay',
     showAugmentSidePanel: 'augments.showSidePanel',
+    showTeammateWinrate: 'teammateWinrate.enabled',
+    showLobbyStats: 'lobbyStats.enabled',
+    showTeammateParticleEffects: 'teammateWinrate.particleEffects',
 }
 
 export function getBooleanPreference(key: string, defaultValue = true): boolean {
@@ -35,4 +38,16 @@ export function shouldShowAugmentTopOverlay(): boolean {
 
 export function shouldShowAugmentSidePanel(): boolean {
     return getBooleanPreference(USER_PREFERENCE_KEYS.showAugmentSidePanel, true)
+}
+
+export function shouldShowTeammateWinrate(): boolean {
+    return getBooleanPreference(USER_PREFERENCE_KEYS.showTeammateWinrate, true)
+}
+
+export function shouldShowLobbyStats(): boolean {
+    return getBooleanPreference(USER_PREFERENCE_KEYS.showLobbyStats, true)
+}
+
+export function shouldShowTeammateParticleEffects(): boolean {
+    return getBooleanPreference(USER_PREFERENCE_KEYS.showTeammateParticleEffects, true)
 }

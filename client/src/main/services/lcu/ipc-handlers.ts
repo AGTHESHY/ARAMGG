@@ -355,5 +355,78 @@ export function registerLCUIpcHandlers(): void {
     }
   })
 
+  ipcMain.handle('lcu-get-owned-skins', async () => {
+    const { service, error } = await getLcuServiceFromStore()
+    if (!service) {
+      return { success: false, error }
+    }
+    const skinIds = await service.getOwnedSkins()
+    return { success: true, skinIds }
+  })
+
+  ipcMain.handle('lcu-get-champion-list', async () => {
+    const { service, error } = await getLcuServiceFromStore()
+    if (!service) {
+      return { success: false, error }
+    }
+    const champions = await service.getChampionList()
+    return { success: true, champions }
+  })
+
+  ipcMain.handle('lcu-get-champion-skins', async (_event, championId: number) => {
+    const { service, error } = await getLcuServiceFromStore()
+    if (!service) {
+      return { success: false, error }
+    }
+    const skins = await service.getChampionSkins(championId)
+    return {
+      success: true,
+      data: {
+        championId,
+        championName: '',
+        skins,
+      },
+    }
+  })
+
+  ipcMain.handle('lcu-set-my-selection-skin', async (_event, skinId: number) => {
+    const { service, error } = await getLcuServiceFromStore()
+    if (!service) {
+      return { success: false, error }
+    }
+    const ok = await service.setMySelectionSkin(skinId)
+    return { success: ok, skinId, error: ok ? null : '设置皮肤失败，可能不在选人阶段' }
+  })
+
+  ipcMain.handle('lcu-get-decorations', async () => {
+    const { service, error } = await getLcuServiceFromStore()
+    if (!service) {
+      return { success: false, error }
+    }
+    const [emotes, wardSkins] = await Promise.all([
+      service.getOwnedEmotes(),
+      service.getOwnedWardSkins(),
+    ])
+    return { success: true, emotes, wardSkins }
+  })
+
+  ipcMain.handle('lcu-get-party-skins', async () => {
+    const { service, error } = await getLcuServiceFromStore()
+    if (!service) {
+      return { success: false, error }
+    }
+    const members = await service.getChampSelectMembers()
+    return { success: true, members }
+  })
+
+  ipcMain.handle('lcu-set-summoner-emote', async (_event, emoteId: number) => {
+    const { service, error } = await getLcuServiceFromStore()
+    if (!service) {
+      return { success: false, error }
+    }
+    const ok = await service.setSummonerEmote(emoteId)
+    return { success: ok, error: ok ? null : '设置表情失败' }
+  })
+
   logger.info('LCU IPC 处理器已注册')
 }

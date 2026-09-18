@@ -11,6 +11,10 @@ export type AppStoreKey =
   | 'postGameShare.autoShow'
   | 'ui.activeNavSection'
   | 'ui.sidebarCollapsed'
+  | 'teammateWinrate.enabled'
+  | 'teammateWinrate.particleEffects'
+  | 'lobbyStats.enabled'
+  | 'skinMods.directory'
 
 export type SupportedDataLocale = 'zh-CN' | 'zh-TW' | 'en-US'
 
@@ -392,6 +396,77 @@ export interface BenchSwapResult extends OperationResult {
   championId?: number
 }
 
+export interface SkinChromaData {
+  id: number
+  name: string
+  colors: string[]
+  chromaPath: string
+  skinId: number
+}
+
+export interface SkinData {
+  skinId: number
+  championId: number
+  skinName: string
+  isBase: boolean
+  chromas: SkinChromaData[]
+  cardPath?: string
+  tilePath?: string
+  splashPath?: string
+  uncenteredCropPath?: string
+  rarity?: string
+  [key: string]: unknown
+}
+
+export interface ChampionSkinData {
+  championId: number
+  championName: string
+  skins: SkinData[]
+}
+
+export interface OwnedSkinsResult extends OperationResult {
+  skinIds?: number[]
+}
+
+export interface ChampionListResult extends OperationResult {
+  champions?: { id: number; name: string; alias: string; title: string; squarePortraitPath: string }[]
+}
+
+export interface ChampionSkinsResult extends OperationResult {
+  data?: ChampionSkinData
+}
+
+export interface SkinSelectResult extends OperationResult {
+  skinId?: number
+}
+
+export interface DecorationItemData {
+  id: number
+  name: string
+  inventoryType: string
+  itemId: number
+  iconPath?: string
+  [key: string]: unknown
+}
+
+export interface DecorationsResult extends OperationResult {
+  emotes?: DecorationItemData[]
+  wardSkins?: DecorationItemData[]
+}
+
+export interface PartyMemberSkin {
+  cellId: number
+  championId: number
+  selectedSkinId: number
+  summonerId: number
+  summonerName: string
+  [key: string]: unknown
+}
+
+export interface PartySkinsResult extends OperationResult {
+  members?: PartyMemberSkin[]
+}
+
 export interface ElectronEventMap {
   fromMain: [payload?: unknown]
   'for-popup': [payload: OverlayPayload]
@@ -511,6 +586,13 @@ export interface ElectronAPI {
     clearManualLeaguePath(): Promise<LooseRecord>
     benchSwap(championId: number): Promise<BenchSwapResult>
     getLobbyStats(): Promise<OperationResult & { data?: LobbyStatsPayload }>
+    getOwnedSkins(): Promise<OwnedSkinsResult>
+    getChampionList(): Promise<ChampionListResult>
+    getChampionSkins(championId: number): Promise<ChampionSkinsResult>
+    setMySelectionSkin(skinId: number): Promise<SkinSelectResult>
+    getDecorations(): Promise<DecorationsResult>
+    getPartySkins(): Promise<PartySkinsResult>
+    setSummonerEmote(emoteId: number): Promise<OperationResult>
   }
   diagnostics: {
     testShowFloating(data: LooseRecord): Promise<OperationResult>

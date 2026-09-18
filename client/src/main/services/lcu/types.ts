@@ -32,6 +32,68 @@ export interface LCUUrls {
   gameflowSession: string
   lobby: string
   benchSwap: string
+  ownedSkins: string
+  championData: string
+  ownedChampions: string
+  mySelection: string
+  regionLocale: string
+  championList: string
+  ownedEmotes: string
+  ownedWardSkins: string
+  ownedRegalia: string
+  champSelectSession: string
+  summonerEmote: string
+  currentSelection: string
+}
+
+/** 皮肤信息 */
+export interface SkinInfo {
+  skinId: number
+  championId: number
+  skinName: string
+  isBase: boolean
+  chromas: ChromaInfo[]
+  [key: string]: unknown
+}
+
+/** 炫彩信息 */
+export interface ChromaInfo {
+  id: number
+  name: string
+  colors: string[]
+  chromaPath: string
+  skinId: number
+  [key: string]: unknown
+}
+
+/** 英雄简要信息 */
+export interface ChampionBrief {
+  id: number
+  name: string
+  alias: string
+  title: string
+  squarePortraitPath: string
+  [key: string]: unknown
+}
+
+/** 装饰物品信息 */
+export interface DecorationItem {
+  id: number
+  name: string
+  inventoryType: string
+  itemId: number
+  iconPath?: string
+  [key: string]: unknown
+}
+
+/** 选人阶段成员信息 */
+export interface ChampSelectMember {
+  cellId: number
+  championId: number
+  selectedSkinId: number
+  summonerId: number
+  summonerName: string
+  [key: string]: unknown
 }
 
 /** 只读选人快照状态 */

@@ -152,6 +152,13 @@ const electronAPI: ElectronAPI = {
     clearManualLeaguePath: () => ipcRenderer.invoke('lcu-clear-manual-league-path'),
     benchSwap: (championId) => ipcRenderer.invoke('lcu-bench-swap', championId),
     getLobbyStats: () => ipcRenderer.invoke('lcu-get-lobby-stats'),
+    getOwnedSkins: () => ipcRenderer.invoke('lcu-get-owned-skins'),
+    getChampionList: () => ipcRenderer.invoke('lcu-get-champion-list'),
+    getChampionSkins: (championId) => ipcRenderer.invoke('lcu-get-champion-skins', championId),
+    setMySelectionSkin: (skinId) => ipcRenderer.invoke('lcu-set-my-selection-skin', skinId),
+    getDecorations: () => ipcRenderer.invoke('lcu-get-decorations'),
+    getPartySkins: () => ipcRenderer.invoke('lcu-get-party-skins'),
+    setSummonerEmote: (emoteId) => ipcRenderer.invoke('lcu-set-summoner-emote', emoteId),
   },
   diagnostics: {
     testShowFloating: (data) => ipcRenderer.invoke('test-show-floating', data),

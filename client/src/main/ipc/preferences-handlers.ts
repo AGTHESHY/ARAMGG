@@ -23,6 +23,12 @@ const RENDERER_STORE_KEYS = new Set<AppStoreKey>([
   'augments.showTopOverlay',
   'augments.showSidePanel',
   'postGameShare.autoShow',
+  'ui.activeNavSection',
+  'ui.sidebarCollapsed',
+  'teammateWinrate.enabled',
+  'teammateWinrate.particleEffects',
+  'lobbyStats.enabled',
+  'skinMods.directory',
 ])
 
 function assertRendererStoreKey(key: unknown): asserts key is AppStoreKey {

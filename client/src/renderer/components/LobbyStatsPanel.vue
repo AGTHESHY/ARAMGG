@@ -26,7 +26,7 @@
         v-for="member in members"
         :key="member.puuid"
         class="member-card"
-        :class="tierClass(member.winRate)"
+        :class="particleEffects ? tierClass(member.winRate) : ''"
       >
         <div class="member-head">
           <strong class="member-name">{{ member.name }}</strong>
@@ -44,14 +44,14 @@
             <small v-if="member.games">{{ formatAvg(member.avgKills) }}/{{ formatAvg(member.avgDeaths) }}/{{ formatAvg(member.avgAssists) }}</small>
           </div>
         </div>
-        <div class="tier-indicator" :class="tierClass(member.winRate)"></div>
+        <div v-if="particleEffects" class="tier-indicator" :class="tierClass(member.winRate)"></div>
       </article>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Users, LoaderCircle, CircleDashed } from 'lucide-vue-next'
 import type { ElectronEventMap } from '../../shared/ipc-contract.ts'
 import { electronAPI, hasElectronAPI } from '../native/electron-api.ts'
@@ -60,6 +60,17 @@ type Payload = ElectronEventMap['lobby-stats-updated'][0]
 const payload = ref<Payload | null>(null)
 const visible = ref(false)
 const loading = ref(false)
+const particleEffects = ref(true)
+
+const loadParticleEffectsPref = async () => {
+  if (!hasElectronAPI()) return
+  try {
+    const value = await electronAPI.store.get('teammateWinrate.particleEffects')
+    particleEffects.value = value != null ? Boolean(value) : true
+  } catch {
+    // keep default
+  }
+}
 
 const members = computed(() => payload.value?.members || [])
 const hasData = computed(() => members.value.length > 0)
@@ -129,6 +140,7 @@ const unsubscribePhase = electronAPI.events.on('game-phase-changed', data => {
 })
 
 onBeforeUnmount(() => { unsubscribeStats(); unsubscribePhase() })
+onMounted(loadParticleEffectsPref)
 </script>
 
 <style scoped>

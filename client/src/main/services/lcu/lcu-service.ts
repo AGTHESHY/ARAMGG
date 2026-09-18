@@ -30,6 +30,10 @@ import {
   ChampSelectSnapshot,
   PerkPage,
   LobbyData,
+  SkinInfo,
+  ChampionBrief,
+  DecorationItem,
+  ChampSelectMember,
 } from './types.ts'
 
 const LCU_ENDPOINT_PROBE_TIMEOUT_MS = 2500
@@ -622,6 +626,18 @@ export class LCUService {
         gameflowSession: `${url}/lol-gameflow/v1/session`,
         lobby: `${url}/lol-lobby/v2/lobby`,
         benchSwap: `${url}/lol-champ-select/v1/session/bench/swap`,
+        ownedSkins: `${url}/lol-inventory/v2/inventory/CHAMPION_SKIN`,
+        championData: `${url}/lol-game-data/assets/v1/champions`,
+        ownedChampions: `${url}/lol-champions/v1/owned-champions-minimal`,
+        mySelection: `${url}/lol-champ-select/v1/session/my-selection`,
+        regionLocale: `${url}/riotclient/region-locale`,
+        championList: `${url}/lol-game-data/v1/champion-summary`,
+        ownedEmotes: `${url}/lol-inventory/v2/inventory/EMOTE`,
+        ownedWardSkins: `${url}/lol-inventory/v2/inventory/WARD_SKIN`,
+        ownedRegalia: `${url}/lol-inventory/v2/inventory/REGALIA`,
+        champSelectSession: `${url}/lol-champ-select/v1/session`,
+        summonerEmote: `${url}/lol-emotes/v1/active`,
+        currentSelection: `${url}/lol-champ-select/v1/session/my-selection`,
       }
     } else {
       this.auth = null
@@ -1536,6 +1552,236 @@ export class LCUService {
       logger.debug('Live Client Data read failed:', err.message)
       return null
     }
+  }
+
+  /**
+   * 获取已拥有皮肤 ID 列表
+   */
+  async getOwnedSkins(): Promise<number[]> {
+    if (!await this.ensureReady()) return []
+    try {
+      const res = await axios.get(this.urls!.ownedSkins, {
+        ...this.auth,
+        httpsAgent: this.httpsAgent,
+        validateStatus: (status) => status < 500,
+        timeout: 5000,
+      })
+      if (res.status === 401) {
+        this.invalidateAuth('owned-skins:unauthorized', null, false)
+        await this.getAuthToken(true)
+        return []
+      }
+      if (!Array.isArray(res.data)) return []
+      return res.data
+        .filter((item: any) => item && typeof item.itemId === 'number')
+        .map((item: any) => item.itemId as number)
+    } catch (error) {
+      if (!await this.recoverFromConnectionFailure('owned-skins', error)) {
+        logger.debug('[LCU] owned skins request failed:', { code: getLcuRequestErrorCode(error) })
+      }
+      return []
+    }
+  }
+
+  /**
+   * 获取英雄列表（简要信息）
+   */
+  async getChampionList(): Promise<ChampionBrief[]> {
+    if (!await this.ensureReady()) return []
+    try {
+      const res = await axios.get(this.urls!.championList, {
+        ...this.auth,
+        httpsAgent: this.httpsAgent,
+        validateStatus: (status) => status < 500,
+        timeout: 5000,
+      })
+      if (res.status === 401) {
+        this.invalidateAuth('champion-list:unauthorized', null, false)
+        await this.getAuthToken(true)
+        return []
+      }
+      if (!Array.isArray(res.data)) return []
+      return res.data
+        .filter((item: any) => item && typeof item.id === 'number' && item.id > 0)
+        .map((item: any) => ({
+          id: item.id,
+          name: item.name || '',
+          alias: item.alias || '',
+          title: item.title || '',
+          squarePortraitPath: item.squarePortraitPath || '',
+          ...item,
+        }))
+    } catch (error) {
+      if (!await this.recoverFromConnectionFailure('champion-list', error)) {
+        logger.debug('[LCU] champion list request failed:', { code: getLcuRequestErrorCode(error) })
+      }
+      return []
+    }
+  }
+
+  /**
+   * 获取英雄的所有皮肤和炫彩
+   */
+  async getChampionSkins(championId: number): Promise<SkinInfo[]> {
+    if (!await this.ensureReady()) return []
+    try {
+      const endpoint = `${this.urls!.championData}/${championId}.json`
+      const res = await axios.get(endpoint, {
+        ...this.auth,
+        httpsAgent: this.httpsAgent,
+        validateStatus: (status) => status < 500,
+        timeout: 8000,
+      })
+      if (res.status === 401) {
+        this.invalidateAuth('champion-skins:unauthorized', null, false)
+        await this.getAuthToken(true)
+        return []
+      }
+      if (!res.data || !Array.isArray(res.data.skins)) return []
+      return res.data.skins.map((skin: any) => ({
+        skinId: skin.id,
+        championId,
+        skinName: skin.name || '',
+        isBase: skin.questRecipients === undefined && skin.id === championId * 1000 + skin.id % 1000,
+        chromas: (skin.chromas || []).map((c: any) => ({
+          id: c.id,
+          name: c.name || '',
+          colors: c.colors || [],
+          chromaPath: c.chromaPath || '',
+          skinId: skin.id,
+          ...c,
+        })),
+        ...skin,
+      }))
+    } catch (error) {
+      if (!await this.recoverFromConnectionFailure('champion-skins', error)) {
+        logger.debug('[LCU] champion skins request failed:', { code: getLcuRequestErrorCode(error) })
+      }
+      return []
+    }
+  }
+
+  /**
+   * 设置选人阶段的皮肤
+   */
+  async setMySelectionSkin(skinId: number): Promise<boolean> {
+    if (!await this.ensureReady()) return false
+    try {
+      const res = await axios.patch(
+        this.urls!.mySelection,
+        { selectedSkinId: skinId },
+        {
+          ...this.auth,
+          httpsAgent: this.httpsAgent,
+          validateStatus: (status) => status < 500,
+          timeout: 5000,
+        }
+      )
+      if (res.status >= 200 && res.status < 300) return true
+      if (res.status === 401) {
+        this.invalidateAuth('my-selection:unauthorized', null, false)
+        await this.getAuthToken(true)
+      }
+      logger.warn('[LCU] set my selection skin failed:', { skinId, status: res.status })
+      return false
+    } catch (error) {
+      if (!await this.recoverFromConnectionFailure('my-selection', error)) {
+        logger.warn('[LCU] set my selection skin error:', { skinId, code: getLcuRequestErrorCode(error) })
+      }
+      return false
+    }
+  }
+
+  /**
+   * 获取区域和语言信息
+   */
+  async getRegionLocale(): Promise<{ locale: string; [key: string]: unknown } | null> {
+    if (!await this.ensureReady()) return null
+    try {
+      const res = await axios.get(this.urls!.regionLocale, {
+        ...this.auth,
+        httpsAgent: this.httpsAgent,
+        validateStatus: (status) => status < 500,
+        timeout: 5000,
+      })
+      if (res.status === 401) {
+        this.invalidateAuth('region-locale:unauthorized', null, false)
+        await this.getAuthToken(true)
+        return null
+      }
+      return res.data
+    } catch (error) {
+      if (!await this.recoverFromConnectionFailure('region-locale', error)) {
+        logger.debug('[LCU] region locale request failed:', { code: getLcuRequestErrorCode(error) })
+      }
+      return null
+    }
+  }
+
+  async getOwnedEmotes(): Promise<DecorationItem[]> {
+    if (!await this.ensureReady()) return []
+    try {
+      const res = await axios.get(this.urls!.ownedEmotes, {
+        ...this.auth, httpsAgent: this.httpsAgent, validateStatus: (s) => s < 500, timeout: 5000,
+      })
+      if (res.status === 401) { this.invalidateAuth('emotes:unauthorized', null, false); await this.getAuthToken(true); return [] }
+      if (!Array.isArray(res.data)) return []
+      return res.data.filter((i: any) => i && typeof i.itemId === 'number').map((i: any) => ({
+        id: i.itemId, name: i.itemId.toString(), inventoryType: 'EMOTE', itemId: i.itemId, ...i,
+      }))
+    } catch { return [] }
+  }
+
+  async getOwnedWardSkins(): Promise<DecorationItem[]> {
+    if (!await this.ensureReady()) return []
+    try {
+      const res = await axios.get(this.urls!.ownedWardSkins, {
+        ...this.auth, httpsAgent: this.httpsAgent, validateStatus: (s) => s < 500, timeout: 5000,
+      })
+      if (res.status === 401) { this.invalidateAuth('ward:unauthorized', null, false); await this.getAuthToken(true); return [] }
+      if (!Array.isArray(res.data)) return []
+      return res.data.filter((i: any) => i && typeof i.itemId === 'number').map((i: any) => ({
+        id: i.itemId, name: i.itemId.toString(), inventoryType: 'WARD_SKIN', itemId: i.itemId, ...i,
+      }))
+    } catch { return [] }
+  }
+
+  async getChampSelectMembers(): Promise<ChampSelectMember[]> {
+    if (!await this.ensureReady()) return []
+    try {
+      const res = await axios.get(this.urls!.champSelectSession, {
+        ...this.auth, httpsAgent: this.httpsAgent, validateStatus: (s) => s < 500, timeout: 5000,
+      })
+      if (res.status === 401) { this.invalidateAuth('champ-session:unauthorized', null, false); await this.getAuthToken(true); return [] }
+      if (!res.data || !Array.isArray(res.data.myTeam)) return []
+      return res.data.myTeam
+        .filter((m: any) => m && m.championId > 0)
+        .map((m: any) => ({
+          cellId: m.cellId,
+          championId: m.championId,
+          selectedSkinId: m.selectedSkinId || 0,
+          summonerId: m.summonerId || 0,
+          summonerName: m.summonerName || '',
+          ...m,
+        }))
+    } catch { return [] }
+  }
+
+  async setSummonerEmote(emoteId: number): Promise<boolean> {
+    if (!await this.ensureReady()) return false
+    try {
+      const res = await axios.put(this.urls!.summonerEmote, { emoteId }, {
+        ...this.auth, httpsAgent: this.httpsAgent, validateStatus: (s) => s < 500, timeout: 5000,
+      })
+      return res.status >= 200 && res.status < 300
+    } catch { return false }
+  }
+
+  private async ensureReady(): Promise<boolean> {
+    if (!this.active || !this.url) {
+      await this.getAuthToken()
+    }
+    return this.active && this.urls != null && this.auth != null
   }
 
   /**
