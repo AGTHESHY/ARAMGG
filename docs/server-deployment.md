@@ -1,6 +1,6 @@
 # 测试服务器部署
 
-部署目标：`38.92.15.80`，目录 `/opt/ARAMGG`。使用独立的 Compose 项目 `mayhem-companion`，不复用其他项目数据库。
+部署目标：`<your-server-ip>`，目录 `/opt/ARAMGG`。使用独立的 Compose 项目 `mayhem-companion`，不复用其他项目数据库。
 
 ## 服务与资源
 
@@ -8,7 +8,7 @@
 - `postgres`：PostgreSQL 16，内存上限 160 MiB，shared_buffers 32 MiB。
 - `probe`：手动运行的上游接口测试，不是常驻同步进程；内存上限 128 MiB。
 - API 默认公开监听服务器 `8788` 端口，供桌面客户端读取中央数据版本；数据库不映射端口。
-- `edge` 使用 Caddy 在 `443` 提供 HTTPS，测试域名默认为 `aramgg.38-92-15-80.sslip.io`，账户密码与共享密钥只通过此入口传输。
+- `edge` 使用 Caddy 在 `443` 提供 HTTPS，测试域名请自行配置，账户密码与共享密钥只通过此入口传输。
 - 常驻容器设置自动重启和日志轮转，不自动清理数据卷。
 
 部署文件是根目录 `compose.server.yaml`，与本地开发的 `compose.yaml` 分开使用。
@@ -35,7 +35,7 @@ ssh -N -L 127.0.0.1:8789:127.0.0.1:8788 mca-test
 curl http://127.0.0.1:8789/health/ready
 ```
 
-Windows 可改用 `ssh -N -L 127.0.0.1:8789:127.0.0.1:8788 root@38.92.15.80`，前提是该电脑已配置授权 SSH 密钥。后续有域名后添加 HTTPS 入口，再将客户端中心源配置为该 HTTPS 地址。
+Windows 可改用 `ssh -N -L 127.0.0.1:8789:127.0.0.1:8788 user@your-server`，前提是该电脑已配置授权 SSH 密钥。后续有域名后添加 HTTPS 入口，再将客户端中心源配置为该 HTTPS 地址。
 
 ## 上游 Key 验证与额度
 
