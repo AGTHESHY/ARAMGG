@@ -92,6 +92,13 @@ const preferenceDefinitions = [
     titleKey: 'preferences.postGameShareTitle',
     descriptionKey: 'preferences.postGameShareDescription',
   },
+  {
+    key: 'enableAramBenchSwap',
+    storeKey: 'aramBenchSwap.enabled',
+    defaultValue: true,
+    titleKey: 'preferences.benchSwapTitle',
+    descriptionKey: 'preferences.benchSwapDescription',
+  },
 ]
 
 const preferenceItems = computed(() => preferenceDefinitions.map(item => ({

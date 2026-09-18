@@ -14,6 +14,7 @@ export type AppStoreKey =
   | 'teammateWinrate.enabled'
   | 'teammateWinrate.particleEffects'
   | 'lobbyStats.enabled'
+  | 'aramBenchSwap.enabled'
   | 'skinMods.directory'
 
 export type SupportedDataLocale = 'zh-CN' | 'zh-TW' | 'en-US'

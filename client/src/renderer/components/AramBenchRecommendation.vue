@@ -89,7 +89,7 @@
                             </div>
                         </div>
                         <button
-                            v-if="!candidate.isCurrent"
+                            v-if="!candidate.isCurrent && benchSwapEnabled"
                             class="swap-btn"
                             type="button"
                             :disabled="swapInFlight === candidate.championId"
@@ -156,6 +156,7 @@ const candidateListRef = ref(null)
 const canScrollLeft = ref(false)
 const canScrollRight = ref(false)
 const swapInFlight = ref(0)
+const benchSwapEnabled = ref(true)
 const unsubscribeEvents = []
 const BENCH_REFRESH_TIMEOUT_MS = 8 * 1000
 let mounted = false
@@ -227,6 +228,12 @@ const refresh = async (showLoading = true) => {
         return
     }
 
+    electronAPI.store.get('aramBenchSwap.enabled').then((value) => {
+        if (value != null) {
+            benchSwapEnabled.value = Boolean(value)
+        }
+    }).catch(() => {})
+
     if (previewMode.value && !showLoading) {
         return
     }
@@ -284,7 +291,7 @@ const formatPercent = (value) => {
 }
 
 const swapChampion = async (championId) => {
-    if (!hasElectronAPI() || swapInFlight.value) return
+    if (!hasElectronAPI() || swapInFlight.value || !benchSwapEnabled.value) return
     swapInFlight.value = championId
     try {
         const result = await electronAPI.lcu.benchSwap(championId)
@@ -393,6 +400,14 @@ watch(candidateListRef, async (candidateList) => {
 
 onMounted(() => {
     mounted = true
+
+    if (hasElectronAPI()) {
+        electronAPI.store.get('aramBenchSwap.enabled').then((value) => {
+            if (value != null) {
+                benchSwapEnabled.value = Boolean(value)
+            }
+        }).catch(() => {})
+    }
 
     if (hasElectronAPI()) {
         unsubscribeEvents.push(electronAPI.events.on('bench-recommendation-preview', (data) => {

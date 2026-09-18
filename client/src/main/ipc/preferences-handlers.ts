@@ -28,6 +28,7 @@ const RENDERER_STORE_KEYS = new Set<AppStoreKey>([
   'teammateWinrate.enabled',
   'teammateWinrate.particleEffects',
   'lobbyStats.enabled',
+  'aramBenchSwap.enabled',
   'skinMods.directory',
 ])
 
