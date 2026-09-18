@@ -190,6 +190,7 @@ async function resolveGameOcrLocaleHint() {
                         password: token,
                     },
                     httpsAgent: riotClientLocaleHttpsAgent,
+                    proxy: false,
                     validateStatus: status => status < 500,
                     timeout: 1200,
                 })

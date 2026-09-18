@@ -594,6 +594,11 @@ export class LCUService {
     rejectUnauthorized: false,
   })
 
+  // Dedicated axios instance with proxy disabled.
+  // System proxy env vars (HTTP_PROXY/HTTPS_PROXY) would otherwise route
+  // localhost LCU requests through an external proxy and break every call.
+  private http = axios.create({ proxy: false })
+
   constructor(options: LCUServiceOptions) {
     this.tokenCacheDuration = options.tokenCacheDuration ?? 60000
     this.failCooldown = options.failCooldown ?? 10000
@@ -721,7 +726,7 @@ export class LCUService {
 
     const startedAt = Date.now()
     try {
-      const response = await axios.get(this.urls.authToken, {
+      const response = await this.http.get(this.urls.authToken, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         proxy: false,
@@ -876,7 +881,7 @@ export class LCUService {
     }
 
     try {
-      const res = await axios.get<ChampSelectSession>(this.urls.curSession, {
+      const res = await this.http.get<ChampSelectSession>(this.urls.curSession, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         validateStatus: (status) => status < 500,
@@ -936,7 +941,7 @@ export class LCUService {
     }
 
     try {
-      const res = await axios.get<PerkPage>(this.urls.curPerk, {
+      const res = await this.http.get<PerkPage>(this.urls.curPerk, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
       })
@@ -958,7 +963,7 @@ export class LCUService {
     }
 
     try {
-      const res = await axios.get<PerkPage[]>(this.urls.perks, {
+      const res = await this.http.get<PerkPage[]>(this.urls.perks, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
       })
@@ -984,7 +989,7 @@ export class LCUService {
     }
 
     try {
-      const response = await axios.get(`${this.url}/entitlements/v1/token`, {
+      const response = await this.http.get(`${this.url}/entitlements/v1/token`, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         proxy: false,
@@ -1025,7 +1030,7 @@ export class LCUService {
     }
 
     try {
-      const res = await axios.get(this.urls.currentSummoner, {
+      const res = await this.http.get(this.urls.currentSummoner, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         validateStatus: (status) => status < 500,
@@ -1089,7 +1094,7 @@ export class LCUService {
     }
 
     try {
-      const current = await axios.get(endpoint, {
+      const current = await this.http.get(endpoint, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         validateStatus: (status) => status < 500,
@@ -1124,7 +1129,7 @@ export class LCUService {
         ),
       })
 
-      const putResult = await axios.put(endpoint, payload, {
+      const putResult = await this.http.put(endpoint, payload, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         validateStatus: (status) => status < 500,
@@ -1189,7 +1194,7 @@ export class LCUService {
     }
 
     try {
-      await axios.delete(`${this.urls.perks}/${id}`, {
+      await this.http.delete(`${this.urls.perks}/${id}`, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
       })
@@ -1210,7 +1215,7 @@ export class LCUService {
     }
 
     try {
-      await axios.post(this.urls.perks, data, {
+      await this.http.post(this.urls.perks, data, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
       })
@@ -1258,7 +1263,7 @@ export class LCUService {
     }
 
     try {
-      const res = await axios.get<GameflowPhase>(this.urls.gameflowPhase, {
+      const res = await this.http.get<GameflowPhase>(this.urls.gameflowPhase, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         validateStatus: (status) => status < 500,
@@ -1294,7 +1299,7 @@ export class LCUService {
     }
 
     try {
-      const res = await axios.get(this.urls.gameflowSession, {
+      const res = await this.http.get(this.urls.gameflowSession, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         validateStatus: (status) => status < 500,
@@ -1321,7 +1326,7 @@ export class LCUService {
     }
 
     try {
-      const res = await axios.get<LobbyData>(this.urls.lobby, {
+      const res = await this.http.get<LobbyData>(this.urls.lobby, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         validateStatus: (status) => status < 500,
@@ -1369,7 +1374,7 @@ export class LCUService {
     const endpoint = `${this.urls.benchSwap}/${normalizedChampionId}`
 
     try {
-      const res = await axios.post(endpoint, {}, {
+      const res = await this.http.post(endpoint, {}, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         validateStatus: (status) => status < 500,
@@ -1463,7 +1468,7 @@ export class LCUService {
     }
 
     try {
-      const response = await axios.get(`${this.url}${endpointPath}`, {
+      const response = await this.http.get(`${this.url}${endpointPath}`, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         params: params
@@ -1517,7 +1522,7 @@ export class LCUService {
     }
 
     try {
-      const res = await axios.get(`${this.url}${endpointPath}`, {
+      const res = await this.http.get(`${this.url}${endpointPath}`, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         validateStatus: (status) => status < 500,
@@ -1540,7 +1545,7 @@ export class LCUService {
    */
   async getLiveClientAllGameData(): Promise<{ status: number; data: any } | null> {
     try {
-      const res = await axios.get('https://127.0.0.1:2999/liveclientdata/allgamedata', {
+      const res = await this.http.get('https://127.0.0.1:2999/liveclientdata/allgamedata', {
         httpsAgent: this.httpsAgent,
         validateStatus: (status) => status < 500,
         timeout: 2500,
@@ -1563,7 +1568,7 @@ export class LCUService {
   async getOwnedSkins(): Promise<number[]> {
     if (!await this.ensureReady()) return []
     try {
-      let res = await axios.get(this.urls!.ownedSkins, {
+      let res = await this.http.get(this.urls!.ownedSkins, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         validateStatus: (status) => status < 500,
@@ -1573,7 +1578,7 @@ export class LCUService {
         this.invalidateAuth('owned-skins:unauthorized', null, false)
         await this.getAuthToken(true)
         if (!this.active || !this.auth || !this.urls) return []
-        res = await axios.get(this.urls!.ownedSkins, {
+        res = await this.http.get(this.urls!.ownedSkins, {
           ...this.auth,
           httpsAgent: this.httpsAgent,
           validateStatus: (status) => status < 500,
@@ -1598,7 +1603,7 @@ export class LCUService {
   async getChampionList(): Promise<ChampionBrief[]> {
     if (!await this.ensureReady()) return []
     try {
-      let res = await axios.get(this.urls!.championList, {
+      let res = await this.http.get(this.urls!.championList, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         validateStatus: (status) => status < 500,
@@ -1608,7 +1613,7 @@ export class LCUService {
         this.invalidateAuth('champion-list:unauthorized', null, false)
         await this.getAuthToken(true)
         if (!this.active || !this.auth || !this.urls) return []
-        res = await axios.get(this.urls!.championList, {
+        res = await this.http.get(this.urls!.championList, {
           ...this.auth,
           httpsAgent: this.httpsAgent,
           validateStatus: (status) => status < 500,
@@ -1641,7 +1646,7 @@ export class LCUService {
     if (!await this.ensureReady()) return []
     try {
       const endpoint = `${this.urls!.championData}/${championId}.json`
-      const res = await axios.get(endpoint, {
+      const res = await this.http.get(endpoint, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         validateStatus: (status) => status < 500,
@@ -1682,7 +1687,7 @@ export class LCUService {
   async setMySelectionSkin(skinId: number): Promise<boolean> {
     if (!await this.ensureReady()) return false
     try {
-      const res = await axios.patch(
+      const res = await this.http.patch(
         this.urls!.mySelection,
         { selectedSkinId: skinId },
         {
@@ -1713,7 +1718,7 @@ export class LCUService {
   async getRegionLocale(): Promise<{ locale: string; [key: string]: unknown } | null> {
     if (!await this.ensureReady()) return null
     try {
-      const res = await axios.get(this.urls!.regionLocale, {
+      const res = await this.http.get(this.urls!.regionLocale, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         validateStatus: (status) => status < 500,
@@ -1736,7 +1741,7 @@ export class LCUService {
   async getOwnedEmotes(): Promise<DecorationItem[]> {
     if (!await this.ensureReady()) return []
     try {
-      const res = await axios.get(this.urls!.ownedEmotes, {
+      const res = await this.http.get(this.urls!.ownedEmotes, {
         ...this.auth, httpsAgent: this.httpsAgent, validateStatus: (s) => s < 500, timeout: 5000,
       })
       if (res.status === 401) { this.invalidateAuth('emotes:unauthorized', null, false); await this.getAuthToken(true); return [] }
@@ -1750,7 +1755,7 @@ export class LCUService {
   async getOwnedWardSkins(): Promise<DecorationItem[]> {
     if (!await this.ensureReady()) return []
     try {
-      const res = await axios.get(this.urls!.ownedWardSkins, {
+      const res = await this.http.get(this.urls!.ownedWardSkins, {
         ...this.auth, httpsAgent: this.httpsAgent, validateStatus: (s) => s < 500, timeout: 5000,
       })
       if (res.status === 401) { this.invalidateAuth('ward:unauthorized', null, false); await this.getAuthToken(true); return [] }
@@ -1764,7 +1769,7 @@ export class LCUService {
   async getChampSelectMembers(): Promise<ChampSelectMember[]> {
     if (!await this.ensureReady()) return []
     try {
-      const res = await axios.get(this.urls!.champSelectSession, {
+      const res = await this.http.get(this.urls!.champSelectSession, {
         ...this.auth, httpsAgent: this.httpsAgent, validateStatus: (s) => s < 500, timeout: 5000,
       })
       if (res.status === 401) { this.invalidateAuth('champ-session:unauthorized', null, false); await this.getAuthToken(true); return [] }
@@ -1785,7 +1790,7 @@ export class LCUService {
   async setSummonerEmote(emoteId: number): Promise<boolean> {
     if (!await this.ensureReady()) return false
     try {
-      const res = await axios.put(this.urls!.summonerEmote, { emoteId }, {
+      const res = await this.http.put(this.urls!.summonerEmote, { emoteId }, {
         ...this.auth, httpsAgent: this.httpsAgent, validateStatus: (s) => s < 500, timeout: 5000,
       })
       return res.status >= 200 && res.status < 300
@@ -1795,7 +1800,7 @@ export class LCUService {
   async setMySelectionChroma(skinId: number, chromaId: number): Promise<boolean> {
     if (!await this.ensureReady()) return false
     try {
-      const res = await axios.patch(
+      const res = await this.http.patch(
         this.urls!.mySelection,
         { selectedSkinId: skinId, selectedChromaId: chromaId },
         { ...this.auth, httpsAgent: this.httpsAgent, validateStatus: (status) => status < 500, timeout: 5000 }
