@@ -47,34 +47,13 @@
 - 中心数据同步服务
 - 窗口大小 960 x 760
 
-## 目录结构
+## 下载
 
-```
-client/            Electron / Vue / TypeScript 客户端
-server/            Fastify / PostgreSQL 中心数据服务
-docs/              项目文档
-compose.yaml       本地容器部署
-```
+前往 [Releases](https://github.com/AGTHESHY/ARAMGG/releases) 下载最新版本。
 
-## 快速开始
+## 二次开发
 
-### 客户端
-
-```sh
-cd client
-npm ci --ignore-scripts
-npm run prepare:client-data
-npm run dev
-```
-
-### 中心服务
-
-```sh
-docker compose up -d --build api
-docker compose exec api node dist/cli.js seed-demo
-```
-
-服务监听本机 `127.0.0.1:8788`，数据库不暴露宿主机端口。
+如需二次开发或自行部署，请参阅 [开发文档](docs/development.md)。
 
 ## 参考代码库
 
