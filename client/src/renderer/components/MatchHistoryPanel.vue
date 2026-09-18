@@ -148,7 +148,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-vue-next'
 import type {
@@ -247,6 +247,23 @@ async function queryPage(startIndex: number): Promise<void> {
     loading.value = false
   }
 }
+
+const unsubscribePhase = electronAPI.events.on('game-phase-changed', data => {
+  if (data.phase === 'Lobby' || data.phase === 'None') {
+    void queryPage(0)
+  }
+})
+
+const unsubscribeMatchHistory = electronAPI.events.on('match-history-updated', () => {
+  if (!loading.value && (page.value?.startIndex ?? 0) === 0) {
+    void queryPage(0)
+  }
+})
+
+onBeforeUnmount(() => {
+  unsubscribePhase()
+  unsubscribeMatchHistory()
+})
 
 onMounted(() => {
   void queryPage(0)

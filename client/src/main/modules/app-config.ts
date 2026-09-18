@@ -875,6 +875,13 @@ async function showLobbyStats(lcuService) {
 
         const payload = await queryLobbyMemberStats(lcuService, lobby, 50)
         notifyAllWindows('lobby-stats-updated', payload)
+
+        const floatingWindow = await ensureFloatingWindow()
+        if (!floatingWindow.isDestroyed()) {
+            applyFloatingWindowLayout()
+            raiseOverlayWindow(floatingWindow, 'lobby-stats')
+        }
+
         logger.info('[lobby-stats] overlay updated', {
             queueId: payload.queueId,
             memberCount: payload.members.length,
@@ -1511,6 +1518,9 @@ async function initGameFlowMonitor() {
                         websocketConnected = false
                         stopGameflowWebSocket('LCU auth endpoint changed')
                         scheduleWebSocketReconnect('LCU auth endpoint changed')
+                        lastLobbyStatsSignature = ''
+                        lastTeammateWinrateSignature = ''
+                        notifyAllWindows('match-history-updated', { updatedAt: Date.now() })
                     }
                 }
 
