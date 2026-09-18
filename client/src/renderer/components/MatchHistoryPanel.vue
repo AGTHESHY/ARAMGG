@@ -248,6 +248,8 @@ async function queryPage(startIndex: number): Promise<void> {
   }
 }
 
+const knownQueueIds = new Set(modeOptions.value.map(m => m.id))
+
 const unsubscribePhase = electronAPI.events.on('game-phase-changed', data => {
   if (data.phase === 'Lobby' || data.phase === 'None') {
     void queryPage(0)
@@ -260,9 +262,17 @@ const unsubscribeMatchHistory = electronAPI.events.on('match-history-updated', (
   }
 })
 
+const unsubscribeLobbyStats = electronAPI.events.on('lobby-stats-updated', data => {
+  if (data.queueId && knownQueueIds.has(data.queueId) && data.queueId !== selectedQueueId.value) {
+    selectedQueueId.value = data.queueId
+    void queryPage(0)
+  }
+})
+
 onBeforeUnmount(() => {
   unsubscribePhase()
   unsubscribeMatchHistory()
+  unsubscribeLobbyStats()
 })
 
 onMounted(() => {

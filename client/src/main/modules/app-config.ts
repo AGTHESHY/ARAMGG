@@ -860,6 +860,36 @@ async function showTeammateWinrates(lcuService, snapshot) {
     }
 }
 
+let lastBroadcastQueueId = null
+
+async function syncCurrentQueueId(lcuService, currentPhase) {
+    try {
+        let queueId = null
+        if (currentPhase === 'Lobby') {
+            const lobby = await lcuService.getLobby()
+            if (lobby) {
+                queueId = Number(lobby.queueId) || Number(lobby.gameConfig?.queueId) || null
+            }
+        } else if (currentPhase === 'ChampSelect') {
+            const session = await lcuService.getCurrentSession()
+            if (session) {
+                queueId = Number(session.queueId) || null
+            }
+        } else {
+            const gfSession = await lcuService.getGameflowSession()
+            if (gfSession?.gameData?.queue?.id) {
+                queueId = Number(gfSession.gameData.queue.id) || null
+            }
+        }
+        if (queueId != null && queueId !== lastBroadcastQueueId) {
+            lastBroadcastQueueId = queueId
+            notifyAllWindows('lobby-stats-updated', { queueId, members: [], updatedAt: Date.now() })
+        }
+    } catch (error) {
+        logger.debug('[queue-id-sync] failed:', error instanceof Error ? error.message : String(error))
+    }
+}
+
 async function showLobbyStats(lcuService) {
     if (!shouldShowLobbyStats()) return
     try {
@@ -1295,6 +1325,7 @@ async function initGameFlowMonitor() {
                 if (currentPhase === 'Lobby' || currentPhase === 'None') {
                     requestLocalMatchHistoryBackgroundSync(`phase-change:${currentPhase}`)
                 }
+                void syncCurrentQueueId(lcuService, currentPhase)
 
                 // 状态机只决定阶段入口效果，Electron/LCU 副作用仍由主进程执行。
                 switch (transition.entryEffect) {
