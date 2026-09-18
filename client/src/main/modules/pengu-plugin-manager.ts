@@ -47,7 +47,7 @@ async function findPenguLoaderPath(): Promise<string | null> {
     try {
       if (fs.existsSync(candidate)) {
         const pluginsDir = path.join(candidate, 'plugins')
-        if (fs.existsSync(pluginsDir) || fs.existsSync(path.join(candidate, 'PenguLoader.exe'))) {
+        if (fs.existsSync(pluginsDir) || fs.existsSync(path.join(candidate, 'Pengu Loader.exe')) || fs.existsSync(path.join(candidate, 'PenguLoader.exe'))) {
           return candidate
         }
       }
