@@ -102,11 +102,11 @@ function tierClass(value: number | null): string {
   return 'tier-dizzy'
 }
 
-async function onTeammateClick(entry: Entry) {
+async function onTeammateClick(_entry: Entry) {
   if (!hasElectronAPI() || swapping.value) return
   swapping.value = true
   try {
-    await electronAPI.matchHistory.queryCurrent(entry.name || String(entry.cellId))
+    await electronAPI.matchHistory.queryCurrent()
   } catch {
     // silently ignore — the match history panel handles its own error display
   } finally {

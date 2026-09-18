@@ -452,7 +452,6 @@ import {
     FolderSearch,
     Languages,
     Minus,
-    PanelLeft,
     RefreshCw,
     RotateCw,
     Save,

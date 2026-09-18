@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { spawn, type ChildProcess } from 'child_process'
 import { createWriteStream } from 'fs'
-import { access, cp, mkdir, readFile, readdir, rename, rm, stat } from 'fs/promises'
+import { access, cp, mkdir, readdir, rename, rm, stat } from 'fs/promises'
 import https from 'https'
 import path from 'path'
 import { createRequire } from 'module'
