@@ -103,7 +103,7 @@ type OcrAugmentLocaleData = PreparedDataLocale & {
 }
 
 export const DATA_API_ORIGIN =
-  process.env.ARAMGG_DATA_API_ORIGIN || import.meta.env?.ARAMGG_DATA_API_ORIGIN || 'http://127.0.0.1:8788'
+  process.env.ARAMGG_DATA_API_ORIGIN || import.meta.env?.ARAMGG_DATA_API_ORIGIN || 'https://aramgg.38-92-15-80.sslip.io'
 const DATA_ALLOWED_ORIGINS = process.env.ARAMGG_DATA_ALLOWED_ORIGINS || ''
 export const DATA_API_PREFIX = '/api/client/v1'
 export const DATA_API_CONFIG_PATH = `${DATA_API_PREFIX}/config`

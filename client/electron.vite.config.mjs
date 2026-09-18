@@ -46,7 +46,7 @@ export default defineConfig({
     envPrefix: ['VITE_', 'ARAMGG_'],
     define: {
       'import.meta.env.ARAMGG_DATA_API_ORIGIN': JSON.stringify(
-        process.env.ARAMGG_DATA_API_ORIGIN || 'http://127.0.0.1:8788'
+        process.env.ARAMGG_DATA_API_ORIGIN || 'https://aramgg.38-92-15-80.sslip.io'
       ),
       'import.meta.env.ARAMGG_ACCOUNT_API_ORIGIN': JSON.stringify(
         process.env.ARAMGG_ACCOUNT_API_ORIGIN || 'https://aramgg.38-92-15-80.sslip.io'
