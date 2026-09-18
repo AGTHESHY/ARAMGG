@@ -6,12 +6,7 @@
     </div>
 
     <div class="card-content">
-      <div class="sona-integration-notice">
-        <p>战绩显示已整合 Sona 插件，注入 LoL 客户端 DOM 显示。</p>
-        <p>在客户端内按 <kbd>F1</kbd> 打开 Sona 设置页可管理详细选项（组队大厅增强、选人阶段战绩等）。</p>
-      </div>
-
-      <div
+  <div
         v-for="item in preferenceItems"
         :key="item.key"
         class="setting-row"
@@ -192,36 +187,6 @@ onMounted(loadPreferences)
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-
-.sona-integration-notice {
-  padding: 10px 12px;
-  border: 1px solid rgba(200, 170, 110, 0.22);
-  border-radius: 3px;
-  background: rgba(1, 10, 19, 0.45);
-}
-
-.sona-integration-notice p {
-  margin: 0;
-  color: var(--lol-muted);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1.5;
-}
-
-.sona-integration-notice p + p {
-  margin-top: 4px;
-}
-
-.sona-integration-notice kbd {
-  display: inline-block;
-  padding: 1px 5px;
-  border: 1px solid rgba(244, 236, 220, 0.18);
-  border-radius: 3px;
-  background: rgba(4, 15, 24, 0.64);
-  color: var(--lol-gold-2);
-  font-size: 10px;
-  font-family: monospace;
 }
 
 .setting-row {
