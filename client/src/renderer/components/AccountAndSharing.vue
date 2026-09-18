@@ -2,77 +2,77 @@
   <section class="account-panel">
     <header class="panel-header">
       <div>
-        <p class="kicker">账户与数据共享</p>
-        <h3>{{ status?.signedIn ? '账户已登录' : '登录后可共享同步密钥' }}</h3>
+        <p class="kicker">{{ t('account.title') }}</p>
+        <h3>{{ status?.signedIn ? t('account.signedIn') : t('account.signInHint') }}</h3>
       </div>
       <span class="state-dot" :class="{ online: status?.signedIn }">
-        {{ status?.signedIn ? '已登录' : '未登录' }}
+        {{ status?.signedIn ? t('account.online') : t('account.offline') }}
       </span>
     </header>
 
     <div v-if="!status?.secureTransport" class="security-notice">
-      当前服务地址未启用 HTTPS。为保护密码和密钥，登录与共享功能已锁定；本地加密保存仍可使用。
+      {{ t('account.httpsRequired') }}
     </div>
 
     <form v-if="!status?.signedIn" class="account-form" @submit.prevent="submitAccount">
       <div class="mode-tabs" role="tablist" aria-label="账户操作">
-        <button type="button" :class="{ active: mode === 'login' }" @click="mode = 'login'">登录</button>
-        <button type="button" :class="{ active: mode === 'register' }" @click="mode = 'register'">注册</button>
+        <button type="button" :class="{ active: mode === 'login' }" @click="mode = 'login'">{{ t('account.login') }}</button>
+        <button type="button" :class="{ active: mode === 'register' }" @click="mode = 'register'">{{ t('account.register') }}</button>
       </div>
       <label>
-        <span>邮箱</span>
+        <span>{{ t('account.email') }}</span>
         <input v-model.trim="email" type="email" autocomplete="email" placeholder="name@example.com" required />
       </label>
       <label>
-        <span>密码</span>
+        <span>{{ t('account.password') }}</span>
         <input v-model="password" type="password" :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" minlength="10" maxlength="128" placeholder="至少 10 位" required />
       </label>
       <button class="primary-action" type="submit" :disabled="busy || !status?.secureTransport">
-        {{ busy ? '处理中…' : mode === 'login' ? '登录' : '创建账户' }}
+        {{ busy ? t('account.processing') : mode === 'login' ? t('account.login') : t('account.create') }}
       </button>
     </form>
 
     <div v-else class="signed-in-row">
       <div>
-        <strong>同步账户</strong>
-        <small>登录令牌已由系统安全存储加密保存</small>
+        <strong>{{ t('account.syncAccount') }}</strong>
+        <small>{{ t('account.sessionEncrypted') }}</small>
       </div>
-      <button type="button" :disabled="busy" @click="logout">退出登录</button>
+      <button type="button" :disabled="busy" @click="logout">{{ t('account.logout') }}</button>
     </div>
 
     <div class="divider"></div>
 
     <form class="key-form" @submit.prevent="saveKey">
       <label>
-        <span>同步密钥</span>
+        <span>{{ t('account.syncKey') }}</span>
         <input v-model.trim="apiKey" type="password" autocomplete="off" placeholder="hx_live_…" :required="!status?.localKey.configured" />
-        <small>{{ status?.localKey.configured ? '本机已有加密密钥；留空可保留当前密钥' : '密钥只在保存或主动共享时使用' }}</small>
+        <small>{{ status?.localKey.configured ? t('account.keySaved') : t('account.keyPrivacy') }}</small>
       </label>
 
       <label class="switch-row" :class="{ disabled: !status?.signedIn || !status?.secureTransport }">
         <span>
-          <strong>共享给中央同步服务</strong>
-          <small>仅在中央数据缺失时使用，并受每日上限保护</small>
+          <strong>{{ t('account.shareTitle') }}</strong>
+          <small>{{ t('account.shareDescription') }}</small>
         </span>
         <input v-model="shareEnabled" type="checkbox" :disabled="!status?.signedIn || !status?.secureTransport" />
       </label>
 
       <label v-if="shareEnabled" class="limit-row">
-        <span>每日最多使用次数</span>
+        <span>{{ t('account.dailyLimit') }}</span>
         <input v-model.number="dailyLimit" type="number" min="2" max="200" />
       </label>
 
       <div v-if="status?.sharedKey?.configured" class="share-summary">
-        <span>密钥标识 {{ status.sharedKey.fingerprint }}</span>
-        <span>今日已用 {{ status.sharedKey.creditsUsedToday || 0 }} / {{ status.sharedKey.dailyShareLimit }}</span>
+        <span>{{ t('account.fingerprint', { value: status.sharedKey.fingerprint }) }}</span>
+        <span>{{ t('account.usedToday', { used: status.sharedKey.creditsUsedToday || 0, limit: status.sharedKey.dailyShareLimit }) }}</span>
       </div>
 
       <div class="key-actions">
         <button class="primary-action" type="submit" :disabled="busy || (!apiKey && !status?.localKey.configured)">
-          {{ busy ? '保存中…' : '保存设置' }}
+          {{ busy ? t('account.saving') : t('account.save') }}
         </button>
         <button v-if="status?.localKey.configured" class="danger-action" type="button" :disabled="busy" @click="revokeKey">
-          删除密钥
+          {{ t('account.deleteKey') }}
         </button>
       </div>
     </form>
@@ -85,6 +85,9 @@
 import { onMounted, ref } from 'vue'
 import type { AccountStatus } from '../../shared/ipc-contract.ts'
 import { electronAPI } from '../native/electron-api.ts'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const status = ref<AccountStatus | null>(null)
 const mode = ref<'login' | 'register'>('login')
@@ -96,22 +99,11 @@ const dailyLimit = ref(20)
 const busy = ref(false)
 const message = ref<{ type: 'success' | 'error' | 'info'; text: string } | null>(null)
 
-const errorLabels: Record<string, string> = {
-  ACCOUNT_EXISTS: '该邮箱已经注册，请直接登录。',
-  INVALID_CREDENTIALS: '邮箱或密码不正确。',
-  INVALID_EMAIL: '请输入有效邮箱。',
-  INVALID_PASSWORD: '密码需为 10–128 位。',
-  INVALID_DEVELOPER_KEY: '密钥格式不正确，应以 hx_live_ 开头。',
-  INVALID_DAILY_LIMIT: '每日使用次数应在 2–200 之间。',
-  AUTHENTICATION_REQUIRED: '请先登录账户。',
-  SECURE_CONNECTION_REQUIRED: '服务尚未启用 HTTPS，已阻止敏感数据传输。',
-  SECURE_STORAGE_UNAVAILABLE: '当前系统安全存储不可用。',
-  Failed_to_fetch: '无法连接账户服务，请稍后重试。',
-}
-
 function explain(error: unknown) {
   const code = error instanceof Error ? error.message : String(error)
-  return errorLabels[code] || errorLabels[code.replaceAll(' ', '_')] || `操作失败：${code}`
+  const errorKey = `account.errors.${code.replaceAll(' ', '_')}`
+  const translated = t(errorKey)
+  return translated === errorKey ? t('account.errors.unknown', { error: code }) : translated
 }
 
 function applyStatus(next: AccountStatus) {
@@ -146,26 +138,26 @@ async function submitAccount() {
     () => mode.value === 'login'
       ? electronAPI.account.login(email.value, password.value)
       : electronAPI.account.register(email.value, password.value),
-    mode.value === 'login' ? '登录成功。' : '账户已创建并登录。',
+    mode.value === 'login' ? t('account.loginSuccess') : t('account.registerSuccess'),
   )
   password.value = ''
 }
 
 async function logout() {
-  await run(() => electronAPI.account.logout(), '已退出登录，本地密钥仍然保留。')
+  await run(() => electronAPI.account.logout(), t('account.logoutSuccess'))
 }
 
 async function saveKey() {
   if (apiKey.value) {
-    await run(() => electronAPI.account.saveKey(apiKey.value, shareEnabled.value, dailyLimit.value), '密钥设置已保存。')
+    await run(() => electronAPI.account.saveKey(apiKey.value, shareEnabled.value, dailyLimit.value), t('account.keySaveSuccess'))
     apiKey.value = ''
     return
   }
-  await run(() => electronAPI.account.updateSharing(shareEnabled.value, dailyLimit.value), '共享设置已更新。')
+  await run(() => electronAPI.account.updateSharing(shareEnabled.value, dailyLimit.value), t('account.shareUpdateSuccess'))
 }
 
 async function revokeKey() {
-  await run(() => electronAPI.account.revokeKey(), '本地与服务器上的密钥已删除。')
+  await run(() => electronAPI.account.revokeKey(), t('account.keyDeleteSuccess'))
   apiKey.value = ''
   shareEnabled.value = false
 }

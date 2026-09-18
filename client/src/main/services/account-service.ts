@@ -7,9 +7,7 @@ import { deleteDeveloperKey, getDeveloperKey, getDeveloperKeyStatus, saveDevelop
 const sessionFile = () => path.join(getConfigDir(), 'account-session.bin')
 const configuredOrigin = process.env.ARAMGG_ACCOUNT_API_ORIGIN
   || import.meta.env?.ARAMGG_ACCOUNT_API_ORIGIN
-  || process.env.ARAMGG_DATA_API_ORIGIN
-  || import.meta.env?.ARAMGG_DATA_API_ORIGIN
-  || 'http://127.0.0.1:8788'
+  || 'https://aramgg.38-92-15-80.sslip.io'
 
 export interface AccountStatus {
   signedIn: boolean

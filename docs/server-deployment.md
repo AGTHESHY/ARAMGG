@@ -8,6 +8,7 @@
 - `postgres`：PostgreSQL 16，内存上限 160 MiB，shared_buffers 32 MiB。
 - `probe`：手动运行的上游接口测试，不是常驻同步进程；内存上限 128 MiB。
 - API 默认公开监听服务器 `8788` 端口，供桌面客户端读取中央数据版本；数据库不映射端口。
+- `edge` 使用 Caddy 在 `443` 提供 HTTPS，测试域名默认为 `aramgg.38-92-15-80.sslip.io`，账户密码与共享密钥只通过此入口传输。
 - 常驻容器设置自动重启和日志轮转，不自动清理数据卷。
 
 部署文件是根目录 `compose.server.yaml`，与本地开发的 `compose.yaml` 分开使用。

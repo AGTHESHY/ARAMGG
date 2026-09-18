@@ -1,5 +1,26 @@
 name: mayhem-companion
 services:
+  edge:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    mem_limit: 64m
+    memswap_limit: 64m
+    cpus: 0.25
+    pids_limit: 50
+    command: ["caddy", "reverse-proxy", "--from", "https://${ARAMGG_PUBLIC_HOST:-aramgg.38-92-15-80.sslip.io}", "--to", "api:8788"]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "2" }
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -114,5 +135,7 @@ secrets:
   key_encryption_key:
     file: ./secrets/key_encryption_key
 volumes:
+  caddy-data:
+  caddy-config:
   postgres-data:
   snapshot-data:
