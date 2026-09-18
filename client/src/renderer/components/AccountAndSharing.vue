@@ -92,7 +92,7 @@ import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 
-const DATA_API_URL = 'https://data.dtodo.cn'
+const DATA_API_URL = 'https://data.dtodo.cn/developer.html?locale=zh-CN'
 
 const openDataApi = async () => {
   try {
