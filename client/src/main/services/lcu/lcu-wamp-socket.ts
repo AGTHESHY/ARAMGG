@@ -15,6 +15,14 @@ export interface LcuWampSocketOptions {
   onOpen?: () => void
   onClose?: (reason: string) => void
   onError?: (error: Error) => void
+  onActivity?: (activity: LcuWebSocketActivity) => void
+  heartbeatIntervalMs?: number
+  pongTimeoutMs?: number
+}
+
+export interface LcuWebSocketActivity {
+  kind: 'text' | 'ping' | 'pong'
+  receivedAt: number
 }
 
 const LCU_WAMP_TOPIC = 'OnJsonApiEvent'
@@ -25,6 +33,8 @@ const OPCODE_TEXT = 0x1
 const OPCODE_CLOSE = 0x8
 const OPCODE_PING = 0x9
 const OPCODE_PONG = 0xa
+const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000
+const DEFAULT_PONG_TIMEOUT_MS = 5_000
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null
@@ -57,6 +67,9 @@ export class LcuWampSocket {
   private subscribed = false
   private closing = false
   private closeNotified = false
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null
+  private pongTimeoutTimer: ReturnType<typeof setTimeout> | null = null
+  private pendingPing: { payload: Buffer; sentAt: number } | null = null
 
   constructor(private readonly options: LcuWampSocketOptions) {}
 
@@ -87,13 +100,17 @@ export class LcuWampSocket {
 
     this.socket.setNoDelay(true)
     this.socket.on('data', (chunk) => this.handleData(chunk))
-    this.socket.on('error', (error) => this.notifyError(error))
+    this.socket.on('error', (error) => {
+      this.notifyError(error)
+      this.closeWithReason('socket-error')
+    })
     this.socket.on('close', () => this.notifyClose(this.closing ? 'closed' : 'socket-closed'))
     this.socket.on('end', () => this.notifyClose('socket-ended'))
   }
 
   close(): void {
     this.closing = true
+    this.stopHeartbeat()
 
     if (!this.socket) {
       this.notifyClose('closed')
@@ -155,6 +172,7 @@ export class LcuWampSocket {
       this.connected = true
       this.options.onOpen?.()
       this.subscribe()
+      this.startHeartbeat()
 
       if (remaining.length > 0) {
         this.handleFrameData(remaining)
@@ -234,10 +252,22 @@ export class LcuWampSocket {
   private handleFrame(frame: WebSocketFrame): void {
     switch (frame.opcode) {
       case OPCODE_TEXT:
+        this.notifyActivity('text')
         this.handleTextFrame(frame.payload.toString('utf8'))
         break
       case OPCODE_PING:
+        this.notifyActivity('ping')
         this.sendFrame(OPCODE_PONG, frame.payload)
+        break
+      case OPCODE_PONG:
+        this.notifyActivity('pong')
+        if (this.pendingPing && frame.payload.equals(this.pendingPing.payload)) {
+          this.pendingPing = null
+          if (this.pongTimeoutTimer) {
+            clearTimeout(this.pongTimeoutTimer)
+            this.pongTimeoutTimer = null
+          }
+        }
         break
       case OPCODE_CLOSE:
         this.close()
@@ -279,6 +309,59 @@ export class LcuWampSocket {
 
     this.subscribed = true
     this.sendText(JSON.stringify([WAMP_SUBSCRIBE, LCU_WAMP_TOPIC]))
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat()
+    const intervalMs = Math.max(1_000, this.options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS)
+    this.heartbeatTimer = setInterval(() => this.runHeartbeat(), intervalMs)
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = null
+    }
+    if (this.pongTimeoutTimer) {
+      clearTimeout(this.pongTimeoutTimer)
+      this.pongTimeoutTimer = null
+    }
+    this.pendingPing = null
+  }
+
+  private runHeartbeat(): void {
+    if (!this.isConnected()) {
+      return
+    }
+
+    if (this.pendingPing) {
+      return
+    }
+
+    const now = Date.now()
+    const payload = Buffer.from(`${now}:${crypto.randomBytes(6).toString('hex')}`, 'utf8')
+    this.pendingPing = { payload, sentAt: now }
+    this.sendFrame(OPCODE_PING, payload)
+    const pongTimeoutMs = Math.max(1_000, this.options.pongTimeoutMs ?? DEFAULT_PONG_TIMEOUT_MS)
+    this.pongTimeoutTimer = setTimeout(() => {
+      if (!this.pendingPing || !this.pendingPing.payload.equals(payload)) return
+      this.notifyError(new Error('LCU WebSocket pong timeout'))
+      this.closeWithReason('pong-timeout')
+    }, pongTimeoutMs)
+  }
+
+  private closeWithReason(reason: string): void {
+    this.closing = true
+    this.stopHeartbeat()
+    const socket = this.socket
+    this.notifyClose(reason)
+    if (socket && !socket.destroyed) {
+      socket.destroy()
+    }
+  }
+
+  private notifyActivity(kind: LcuWebSocketActivity['kind']): void {
+    this.options.onActivity?.({ kind, receivedAt: Date.now() })
   }
 
   private sendText(text: string): void {
@@ -325,6 +408,7 @@ export class LcuWampSocket {
     this.closeNotified = true
     this.connected = false
     this.subscribed = false
+    this.stopHeartbeat()
     this.socket = null
     this.options.onClose?.(reason)
   }

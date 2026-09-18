@@ -18,7 +18,7 @@ import https from 'https'
 import axios from 'axios'
 import logger from '../../modules/logger.ts'
 import { getLcuToken } from './token-loader.ts'
-import { LcuJsonApiEvent, LcuWampSocket } from './lcu-wamp-socket.ts'
+import { LcuJsonApiEvent, LcuWampSocket, type LcuWebSocketActivity } from './lcu-wamp-socket.ts'
 import {
   LCUAuthResult,
   LCUAuthConfig,
@@ -556,6 +556,9 @@ export interface GameflowPhaseSubscriptionOptions {
   onOpen?: () => void
   onClose?: (reason: string) => void
   onError?: (error: Error) => void
+  onActivity?: (activity: LcuWebSocketActivity) => void
+  heartbeatIntervalMs?: number
+  pongTimeoutMs?: number
 }
 
 /**
@@ -1847,6 +1850,9 @@ export class LCUService {
       onOpen: options.onOpen,
       onClose: options.onClose,
       onError: options.onError,
+      onActivity: options.onActivity,
+      heartbeatIntervalMs: options.heartbeatIntervalMs,
+      pongTimeoutMs: options.pongTimeoutMs,
     })
 
     socket.connect()

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { app, globalShortcut, BrowserWindow } from 'electron'
+import { app, globalShortcut, BrowserWindow, powerMonitor } from 'electron'
 import { getLolGameStatus } from '../screenshot.ts'
 import { registerIpcHandlers } from './ipc-handlers.ts'
 import {
@@ -44,6 +44,7 @@ import {
 } from '../services/aram/bench-recommendation.ts'
 import {
     capturePostGameShareSnapshot,
+    isPostGameShareSessionCurrent,
     preparePostGameSharePosterData,
     resetPostGameShareSnapshot,
 } from '../services/post-game-share.ts'
@@ -84,6 +85,8 @@ let lcuGameflowSubscription = null
 let lcuGameflowReconnectTimer = null
 let lcuGameflowMonitorStopping = false
 let lcuGameflowInitPromise = null
+let lcuConnectionGeneration = 0
+let lcuResumeHandler = null
 let quitCleanupCompleted = false
 let quitCleanupPromise = null
 const AUTO_SCREENSHOT_MAX_CAPTURES = 100
@@ -91,7 +94,8 @@ const GAME_WINDOW_STATUS_LOG_INTERVAL_MS = 30000
 const GAMEFLOW_AUGMENT_ANALYSIS_PHASE = 'InProgress'
 const GAMEFLOW_POLL_FALLBACK_INTERVAL_MS = 1000
 const GAMEFLOW_TOKEN_REFRESH_INTERVAL_MS = 60000
-const GAMEFLOW_WS_STALE_MS = 15000
+const GAMEFLOW_CONNECTED_VALIDATION_INTERVAL_MS = 30000
+const GAMEFLOW_DISCONNECTED_POLL_INTERVAL_MS = 5000
 const GAMEFLOW_WS_RECONNECT_BASE_MS = 2000
 const GAMEFLOW_WS_RECONNECT_MAX_MS = 30000
 const GAME_API_DIAGNOSTIC_INTERVAL_MS = 15000
@@ -886,6 +890,13 @@ async function showChampionInsightForChampSelect(lcuService) {
 
 async function prepareAndNotifyPostGameShare(lcuService, reason) {
     const result = await preparePostGameSharePosterData(lcuService, reason)
+    if (!isPostGameShareSessionCurrent(result.sessionKey)) {
+        logger.info('[post-game-share] archived poster belongs to an earlier session', {
+            reason,
+            sessionKey: result.sessionKey,
+        })
+        return
+    }
     if (!result?.data || result.data.status === 'unavailable') {
         logger.debug('[post-game-share] poster notification skipped', {
             reason,
@@ -1155,6 +1166,7 @@ async function reconcileAutoScreenshotWithLolWindow(phase) {
 }
 
 function stopGameflowWebSocket(reason) {
+    lcuConnectionGeneration += 1
     if (lcuGameflowReconnectTimer) {
         clearTimeout(lcuGameflowReconnectTimer)
         lcuGameflowReconnectTimer = null
@@ -1170,6 +1182,7 @@ function stopGameflowWebSocket(reason) {
 function stopGameflowMonitorRuntime(reason) {
     lcuGameflowMonitorStopping = true
     stopGameflowWebSocket(reason)
+    lcuResumeHandler = null
 
     if (lcuPollingTimer) {
         clearInterval(lcuPollingTimer)
@@ -1243,10 +1256,13 @@ async function initGameFlowMonitor() {
         const gameSessionCoordinator = new GameSessionCoordinator()
         let lastTokenRefreshAt = Date.now()
         let websocketConnected = false
-        let websocketLastEventAt = 0
+        let websocketLastReceivedAt = 0
         let websocketReconnectAttempts = 0
         let websocketConnecting = false
         let pollInFlight = false
+        let phaseSyncGeneration = null
+        let lastPhaseValidationAt = Date.now()
+        let lastDisconnectedPollAt = 0
 
         const handleGameflowPhase = async (phase, source) => {
             if (!phase) {
@@ -1363,6 +1379,28 @@ async function initGameFlowMonitor() {
             }, delay)
         }
 
+        const syncCurrentGameflowPhase = async (source, generation = lcuConnectionGeneration) => {
+            if (
+                phaseSyncGeneration === generation ||
+                lcuGameflowMonitorStopping ||
+                generation !== lcuConnectionGeneration
+            ) {
+                return
+            }
+
+            phaseSyncGeneration = generation
+            try {
+                const phase = await lcuService.getGameflowPhase()
+                if (lcuGameflowMonitorStopping || generation !== lcuConnectionGeneration) return
+                lastPhaseValidationAt = Date.now()
+                await handleGameflowPhase(phase, source)
+            } finally {
+                if (phaseSyncGeneration === generation) {
+                    phaseSyncGeneration = null
+                }
+            }
+        }
+
         const connectGameflowWebSocket = async (forceRefresh = false) => {
             if (lcuGameflowMonitorStopping || websocketConnecting) {
                 return
@@ -1373,21 +1411,26 @@ async function initGameFlowMonitor() {
             }
 
             websocketConnecting = true
+            const connectionGeneration = ++lcuConnectionGeneration
             try {
                 const subscription = await lcuService.subscribeGameflowPhase(
                     async (phase) => {
-                        websocketLastEventAt = Date.now()
+                        if (connectionGeneration !== lcuConnectionGeneration) return
+                        websocketLastReceivedAt = Date.now()
                         await handleGameflowPhase(phase, 'websocket')
                     },
                     {
                         forceRefresh,
                         onOpen: () => {
+                            if (connectionGeneration !== lcuConnectionGeneration) return
                             websocketConnected = true
-                            websocketLastEventAt = Date.now()
+                            websocketLastReceivedAt = Date.now()
                             websocketReconnectAttempts = 0
                             logger.info('LCU OnJsonApiEvent WebSocket 已订阅 gameflow phase')
+                            void syncCurrentGameflowPhase('websocket-open', connectionGeneration)
                         },
                         onClose: (reason) => {
+                            if (connectionGeneration !== lcuConnectionGeneration) return
                             websocketConnected = false
                             lcuGameflowSubscription = null
                             if (!lcuGameflowMonitorStopping) {
@@ -1396,10 +1439,20 @@ async function initGameFlowMonitor() {
                             }
                         },
                         onError: (error) => {
+                            if (connectionGeneration !== lcuConnectionGeneration) return
                             logger.debug('LCU OnJsonApiEvent WebSocket 错误:', error.message)
+                        },
+                        onActivity: ({ receivedAt }) => {
+                            if (connectionGeneration !== lcuConnectionGeneration) return
+                            websocketLastReceivedAt = receivedAt
                         },
                     }
                 )
+
+                if (connectionGeneration !== lcuConnectionGeneration) {
+                    subscription?.close()
+                    return
+                }
 
                 if (!subscription) {
                     websocketConnected = false
@@ -1418,8 +1471,20 @@ async function initGameFlowMonitor() {
         }
 
         const initialPhase = await lcuService.getGameflowPhase()
+        lastPhaseValidationAt = Date.now()
         await handleGameflowPhase(initialPhase, 'initial')
         void connectGameflowWebSocket()
+
+        lcuResumeHandler = () => {
+            logger.info('系统从休眠恢复，立即校验 LCU 连接与游戏阶段')
+            if (!lcuGameflowSubscription?.isConnected()) {
+                websocketConnected = false
+                stopGameflowWebSocket('system resume connection validation')
+                void connectGameflowWebSocket(true)
+                return
+            }
+            void syncCurrentGameflowPhase('system-resume', lcuConnectionGeneration)
+        }
 
         lcuPollingTimer = setInterval(async () => {
             if (lcuGameflowMonitorStopping || pollInFlight) return
@@ -1444,16 +1509,22 @@ async function initGameFlowMonitor() {
                     }
                 }
 
-                const websocketFresh =
+                const websocketHealthy =
                     websocketConnected &&
-                    lcuGameflowSubscription?.isConnected() &&
-                    now - websocketLastEventAt <= GAMEFLOW_WS_STALE_MS
+                    lcuGameflowSubscription?.isConnected()
 
-                if (!websocketFresh) {
-                    const phase = await lcuService.getGameflowPhase()
-                    if (lcuGameflowMonitorStopping) return
-                    await handleGameflowPhase(phase, 'poll')
+                const validationDue = websocketHealthy
+                    ? now - lastPhaseValidationAt >= GAMEFLOW_CONNECTED_VALIDATION_INTERVAL_MS
+                    : now - lastDisconnectedPollAt >= GAMEFLOW_DISCONNECTED_POLL_INTERVAL_MS
 
+                if (validationDue) {
+                    if (!websocketHealthy) lastDisconnectedPollAt = now
+                    await syncCurrentGameflowPhase(websocketHealthy ? 'periodic-validation' : 'disconnected-poll')
+
+                    if (!websocketHealthy && lcuGameflowSubscription) {
+                        websocketConnected = false
+                        stopGameflowWebSocket('connection health check failed')
+                    }
                     if (!lcuGameflowSubscription && !lcuGameflowReconnectTimer) {
                         scheduleWebSocketReconnect('fallback-poll')
                     }
@@ -1472,7 +1543,7 @@ async function initGameFlowMonitor() {
         }, GAMEFLOW_POLL_FALLBACK_INTERVAL_MS)
 
         logger.info(
-            `游戏流程监控已启动 (OnJsonApiEvent WebSocket + ${GAMEFLOW_POLL_FALLBACK_INTERVAL_MS / 1000}s 轮询兜底，每 ${GAMEFLOW_TOKEN_REFRESH_INTERVAL_MS / 1000}s 刷新 token)`
+            `游戏流程监控已启动 (WebSocket 心跳 + ${GAMEFLOW_CONNECTED_VALIDATION_INTERVAL_MS / 1000}s 正常校验 + ${GAMEFLOW_DISCONNECTED_POLL_INTERVAL_MS / 1000}s 断线轮询)`
         )
     } catch (error) {
         logger.error('初始化游戏流程监控失败:', error)
@@ -1518,6 +1589,10 @@ function ensureQuitCleanup(reason = 'app quit') {
 
 function registerAppEvents() {
     let appUpdateInstallOnQuitPromise = null
+
+    powerMonitor?.on?.('resume', () => {
+        lcuResumeHandler?.()
+    })
 
     app.on('before-quit', (event) => {
         if (isAppUpdateInstallInProgress()) {

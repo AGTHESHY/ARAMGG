@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   ensureSidePanel: vi.fn(),
   notify: vi.fn(),
   applyPopupPreferences: vi.fn(),
+  powerOn: vi.fn(),
   logError: vi.fn(),
   popup: { show: vi.fn(), isVisible: () => false, isDestroyed: () => false, webContents: { send: vi.fn() } },
 }))
@@ -19,6 +20,7 @@ vi.mock('electron', () => ({
   app: { isPackaged: false, getVersion: () => 'test', on: vi.fn(), quit: vi.fn() },
   BrowserWindow: { getAllWindows: () => [] },
   globalShortcut: { unregisterAll: vi.fn() },
+  powerMonitor: { on: mocks.powerOn },
   Menu: { setApplicationMenu: vi.fn() },
 }))
 vi.mock('../../src/main/modules/logger.ts', () => ({ default: {
@@ -65,6 +67,7 @@ vi.mock('../../src/main/services/aram/bench-recommendation.ts', () => ({
 vi.mock('../../src/main/services/post-game-share.ts', () => ({
   resetPostGameShareSnapshot: vi.fn(), capturePostGameShareSnapshot: vi.fn(async () => {}),
   preparePostGameSharePosterData: vi.fn(async () => ({ data: { status: 'unavailable' } })),
+  isPostGameShareSessionCurrent: vi.fn(() => true),
 }))
 vi.mock('../../src/main/modules/app-paths.ts', () => ({ getAppDataDir: () => '/tmp/isolated-monitor-test' }))
 vi.mock('../../src/main/modules/diagnostic-logger.ts', () => ({ logDiagnosticSnapshot: vi.fn(async () => {}) }))
@@ -74,11 +77,14 @@ vi.mock('../../src/main/modules/user-preferences.ts', () => ({
   shouldShowChampionDetails: () => true,
   shouldShowAugmentTopOverlay: () => true,
   shouldShowAugmentSidePanel: () => true,
+  shouldShowTeammateWinrate: () => false,
+  shouldShowLobbyStats: () => false,
 }))
 
 beforeEach(() => {
   vi.resetModules()
   vi.useFakeTimers()
+  mocks.powerOn.mockClear()
   mocks.store.clear()
   mocks.store.set('diagnostics.lcuHeartbeat', false)
   mocks.store.set('itemSets.autoApplyAram', false)
@@ -161,8 +167,66 @@ describe('main-process monitoring ownership', () => {
     await vi.advanceTimersByTimeAsync(6000)
     expect(mocks.phase).toHaveBeenCalledTimes(2)
     resolve('None')
-    await vi.advanceTimersByTimeAsync(1000)
+    await vi.advanceTimersByTimeAsync(5000)
     expect(mocks.phase).toHaveBeenCalledTimes(3)
+  })
+
+  it('keeps a quiet healthy websocket on low-frequency phase validation', async () => {
+    mocks.subscribe.mockImplementationOnce(async (_onPhase, options) => {
+      const subscription = { isConnected: () => true, close: vi.fn() }
+      queueMicrotask(() => options.onOpen?.())
+      return subscription
+    })
+
+    await start()
+    await vi.advanceTimersByTimeAsync(120000)
+
+    // Initial sync, open sync, then one validation every 30 seconds.
+    expect(mocks.phase.mock.calls.length).toBeGreaterThanOrEqual(5)
+    expect(mocks.phase.mock.calls.length).toBeLessThanOrEqual(7)
+  })
+
+  it('synchronizes the current phase immediately after system resume', async () => {
+    mocks.subscribe.mockImplementationOnce(async (_onPhase, options) => {
+      const subscription = { isConnected: () => true, close: vi.fn() }
+      queueMicrotask(() => options.onOpen?.())
+      return subscription
+    })
+
+    await start()
+    const callsBeforeResume = mocks.phase.mock.calls.length
+    const resumeHandler = mocks.powerOn.mock.calls.find(([event]) => event === 'resume')?.[1]
+    expect(resumeHandler).toBeTypeOf('function')
+    resumeHandler()
+    await vi.dynamicImportSettled()
+
+    expect(mocks.phase.mock.calls.length).toBe(callsBeforeResume + 1)
+  })
+
+  it('ignores late callbacks from a replaced websocket connection', async () => {
+    const callbacks = []
+    mocks.subscribe.mockImplementation(async (onPhase, options) => {
+      callbacks.push({ onPhase, options })
+      const subscription = { isConnected: () => true, close: vi.fn() }
+      queueMicrotask(() => options.onOpen?.())
+      return subscription
+    })
+
+    await start()
+    expect(callbacks).toHaveLength(1)
+    callbacks[0].options.onClose?.('replace-a')
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(callbacks).toHaveLength(2)
+
+    const snapshotCallsBeforeLateMessage = mocks.snapshot.mock.calls.length
+    await callbacks[0].onPhase('ChampSelect')
+    callbacks[0].options.onClose?.('late-close-a')
+    callbacks[0].options.onError?.(new Error('late-error-a'))
+    callbacks[0].options.onActivity?.({ kind: 'pong', receivedAt: Date.now() })
+    await vi.advanceTimersByTimeAsync(4000)
+
+    expect(callbacks).toHaveLength(2)
+    expect(mocks.snapshot.mock.calls.length).toBe(snapshotCallsBeforeLateMessage)
   })
 
   it('does not show an obsolete champion after the game changes while the popup loads', async () => {

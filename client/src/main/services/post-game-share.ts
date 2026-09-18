@@ -72,6 +72,7 @@ type SnapshotChampion = {
 type SnapshotAugment = Omit<PostGameShareAugment, 'imageDataUrl'>
 
 type PostGameShareSnapshot = {
+  gameId: number | null
   result: PostGameSharePosterData['result']
   gameMode: string
   queueName: string
@@ -87,6 +88,23 @@ type PostGameShareSnapshot = {
 
 type SnapshotUpdate = Partial<Omit<PostGameShareSnapshot, 'sources' | 'updatedAt'>> & {
   sources?: string[]
+}
+
+type PreparePosterResult = {
+  success: boolean
+  data: PostGameSharePosterData
+  error?: string
+  sessionKey: string
+}
+
+type PostGameShareContext = {
+  sessionKey: string
+  generation: number
+  retired: boolean
+  snapshot: PostGameShareSnapshot
+  latestPosterData: PostGameSharePosterData | null
+  liveSnapshotAt: number
+  preparePosterPromise: Promise<PreparePosterResult> | null
 }
 
 const LIVE_SNAPSHOT_THROTTLE_MS = 5000
@@ -137,11 +155,11 @@ const identityKeys = new Set([
 const resultKeys = new Set(['win', 'won', 'victory', 'gamewon', 'iswinner', 'result', 'gameresult'])
 const localPlayerKeys = new Set(['islocalplayer', 'localplayer', 'islocal', 'iscurrentplayer'])
 const durationKeys = new Set(['gamelength', 'gamelengthseconds', 'gameduration', 'duration'])
+const gameIdKeys = new Set(['gameid', 'gameidentifier'])
 
-let liveSnapshotAt = 0
-let currentSnapshot: PostGameShareSnapshot = createEmptySnapshot('init')
-let latestPosterData: PostGameSharePosterData | null = null
-let preparePosterPromise: Promise<{ success: boolean; data: PostGameSharePosterData; error?: string }> | null = null
+let sessionGeneration = 0
+let currentContext = createPostGameShareContext('init')
+const archivedContexts = new Map<string, PostGameShareContext>()
 let championLookupPromise: Promise<Map<string, number>> | null = null
 let mockAugmentCountCursor = 0
 
@@ -171,6 +189,7 @@ function createEmptyChampion(): SnapshotChampion {
 
 function createEmptySnapshot(reason: string): PostGameShareSnapshot {
   return {
+    gameId: null,
     result: 'unknown',
     gameMode: 'ARAM',
     queueName: 'ARAM',
@@ -182,6 +201,19 @@ function createEmptySnapshot(reason: string): PostGameShareSnapshot {
     identityCandidates: [],
     sources: reason ? [reason] : [],
     updatedAt: Date.now(),
+  }
+}
+
+function createPostGameShareContext(reason: string): PostGameShareContext {
+  const generation = ++sessionGeneration
+  return {
+    sessionKey: `session-${generation}`,
+    generation,
+    retired: false,
+    snapshot: createEmptySnapshot(reason),
+    latestPosterData: null,
+    liveSnapshotAt: 0,
+    preparePosterPromise: null,
   }
 }
 
@@ -797,23 +829,44 @@ function mergeAugments(existing: SnapshotAugment[], incoming: SnapshotAugment[] 
   return result.filter((augment) => augment.id != null || augment.name).slice(0, 6)
 }
 
-function mergeSnapshot(update: SnapshotUpdate): void {
-  const sources = new Set([...currentSnapshot.sources, ...(update.sources || [])].filter(Boolean))
-  currentSnapshot = {
-    ...currentSnapshot,
+function mergeSnapshot(context: PostGameShareContext, update: SnapshotUpdate): boolean {
+  const incomingGameId = update.gameId ?? null
+  const existingGameId = context.snapshot.gameId
+  if (incomingGameId && existingGameId && incomingGameId !== existingGameId) {
+    logger.warn('[post-game-share] rejected cross-session snapshot update', {
+      sessionKey: context.sessionKey,
+      expectedGameId: existingGameId,
+      receivedGameId: incomingGameId,
+    })
+    return false
+  }
+
+  if (context.retired && !existingGameId) {
+    logger.warn('[post-game-share] rejected unbound update for retired session', {
+      sessionKey: context.sessionKey,
+      receivedGameId: incomingGameId,
+    })
+    return false
+  }
+
+  const sources = new Set([...context.snapshot.sources, ...(update.sources || [])].filter(Boolean))
+  context.snapshot = {
+    ...context.snapshot,
     ...update,
-    champion: mergeChampion(currentSnapshot.champion, update.champion),
-    stats: mergeStats(currentSnapshot.stats, update.stats),
-    augments: mergeAugments(currentSnapshot.augments, update.augments),
+    gameId: existingGameId || incomingGameId,
+    champion: mergeChampion(context.snapshot.champion, update.champion),
+    stats: mergeStats(context.snapshot.stats, update.stats),
+    augments: mergeAugments(context.snapshot.augments, update.augments),
     identityCandidates: [
       ...new Set([
-        ...currentSnapshot.identityCandidates,
+        ...context.snapshot.identityCandidates,
         ...(update.identityCandidates || []),
       ].filter(Boolean)),
     ],
     sources: [...sources],
     updatedAt: Date.now(),
   }
+  return true
 }
 
 function getChampionIconUrl(championId: number | null, fallbackUrl = ''): string {
@@ -903,6 +956,7 @@ async function decorateAugments(
 async function buildSnapshotUpdateFromPayload(params: {
   payload: unknown
   source: string
+  context: PostGameShareContext
   gameflowSession?: unknown
   currentSummoner?: unknown
 }): Promise<SnapshotUpdate> {
@@ -914,22 +968,23 @@ async function buildSnapshotUpdateFromPayload(params: {
   const activeChampionName = extractChampionName(activePlayer)
   const summonerIdentityCandidates = collectIdentityCandidates(params.currentSummoner)
   const activeIdentityCandidates = collectIdentityCandidates(activePlayer)
-  const context = {
-    championId: activeChampionId || championIdFromSession || currentSnapshot.champion.id || championIdFromStore,
+  const snapshot = params.context.snapshot
+  const selectionContext = {
+    championId: activeChampionId || championIdFromSession || snapshot.champion.id || championIdFromStore,
     identityCandidates: [
       ...new Set([
-        ...currentSnapshot.identityCandidates,
+        ...snapshot.identityCandidates,
         ...summonerIdentityCandidates,
         ...activeIdentityCandidates,
       ]),
     ],
-    championName: activeChampionName || currentSnapshot.champion.name || '',
+    championName: activeChampionName || snapshot.champion.name || '',
   }
-  const selectedPlayer = selectPlayerRecord(params.payload, context) || activePlayer
+  const selectedPlayer = selectPlayerRecord(params.payload, selectionContext) || activePlayer
   const selectedChampionName = extractChampionName(selectedPlayer) || activeChampionName
   const championId =
     extractChampionId(selectedPlayer) ||
-    context.championId ||
+    selectionContext.championId ||
     (selectedChampionName ? await resolveChampionIdFromName(selectedChampionName) : null)
   const champion = await createChampion(championId, selectedChampionName)
   const augmentBaseById = await loadAugmentDetail()
@@ -955,12 +1010,15 @@ async function buildSnapshotUpdateFromPayload(params: {
   )
   const stats = extractStats(selectedPlayer)
   const result = readResult(selectedPlayer) !== 'unknown' ? readResult(selectedPlayer) : readResult(params.payload)
-  const gameMode = getStringValue(payloadRecord.gameMode || payloadRecord.gameData?.gameMode) || currentSnapshot.gameMode
-  const queueName = gameMode.toUpperCase().includes('ARAM') ? 'ARAM' : gameMode || currentSnapshot.queueName
-  const summonerName = extractSummonerName(selectedPlayer) || extractSummonerName(activePlayer) || currentSnapshot.summonerName
-  const durationSeconds = extractDurationSeconds(params.payload) ?? currentSnapshot.durationSeconds
+  const gameMode = getStringValue(payloadRecord.gameMode || payloadRecord.gameData?.gameMode) || snapshot.gameMode
+  const queueName = gameMode.toUpperCase().includes('ARAM') ? 'ARAM' : gameMode || snapshot.queueName
+  const summonerName = extractSummonerName(selectedPlayer) || extractSummonerName(activePlayer) || snapshot.summonerName
+  const durationSeconds = extractDurationSeconds(params.payload) ?? snapshot.durationSeconds
 
   return {
+    gameId:
+      toPositiveInteger(readNumberByKeys(params.payload, gameIdKeys)) ||
+      toPositiveInteger(readNumberByKeys(params.gameflowSession, gameIdKeys)),
     result,
     gameMode,
     queueName,
@@ -969,7 +1027,7 @@ async function buildSnapshotUpdateFromPayload(params: {
     champion,
     stats,
     augments: liveAugments,
-    identityCandidates: context.identityCandidates,
+    identityCandidates: selectionContext.identityCandidates,
     sources: [params.source],
   }
 }
@@ -1049,43 +1107,58 @@ function getPosterStatus(snapshot: PostGameShareSnapshot): PostGameSharePosterDa
   return 'unavailable'
 }
 
-async function buildPosterData(reason: string, hydrateImages: boolean): Promise<PostGameSharePosterData> {
-  const decoratedAugments = await decorateAugments(currentSnapshot.augments, currentSnapshot.champion.id)
-  currentSnapshot = {
-    ...currentSnapshot,
+async function buildPosterData(
+  context: PostGameShareContext,
+  reason: string,
+  hydrateImages: boolean
+): Promise<PostGameSharePosterData> {
+  const decoratedAugments = await decorateAugments(context.snapshot.augments, context.snapshot.champion.id)
+  context.snapshot = {
+    ...context.snapshot,
     augments: decoratedAugments,
     updatedAt: Date.now(),
   }
 
   const data: PostGameSharePosterData = {
-    status: getPosterStatus(currentSnapshot),
+    status: getPosterStatus(context.snapshot),
     reason,
-    result: currentSnapshot.result,
-    gameMode: currentSnapshot.gameMode,
-    queueName: currentSnapshot.queueName,
-    durationSeconds: currentSnapshot.durationSeconds,
-    summonerName: currentSnapshot.summonerName,
+    result: context.snapshot.result,
+    gameMode: context.snapshot.gameMode,
+    queueName: context.snapshot.queueName,
+    durationSeconds: context.snapshot.durationSeconds,
+    summonerName: context.snapshot.summonerName,
     champion: {
-      ...currentSnapshot.champion,
+      ...context.snapshot.champion,
       imageDataUrl: null,
     },
-    stats: currentSnapshot.stats,
-    augments: currentSnapshot.augments.map((augment) => ({
+    stats: context.snapshot.stats,
+    augments: context.snapshot.augments.map((augment) => ({
       ...augment,
       imageDataUrl: null,
     })),
-    sources: currentSnapshot.sources,
-    updatedAt: currentSnapshot.updatedAt,
+    sources: context.snapshot.sources,
+    updatedAt: context.snapshot.updatedAt,
   }
 
   return hydrateImages ? hydratePosterImages(data) : data
 }
 
 export function resetPostGameShareSnapshot(reason: string): void {
-  currentSnapshot = createEmptySnapshot(reason)
-  latestPosterData = null
-  liveSnapshotAt = 0
-  logger.debug('[post-game-share] snapshot reset', { reason })
+  const previousContext = currentContext
+  previousContext.retired = true
+  archivedContexts.set(previousContext.sessionKey, previousContext)
+  while (archivedContexts.size > 8) {
+    const oldestKey = archivedContexts.keys().next().value
+    if (!oldestKey) break
+    archivedContexts.delete(oldestKey)
+  }
+
+  currentContext = createPostGameShareContext(reason)
+  logger.debug('[post-game-share] snapshot reset', {
+    reason,
+    previousSessionKey: previousContext.sessionKey,
+    sessionKey: currentContext.sessionKey,
+  })
 }
 
 export async function capturePostGameShareSnapshot(
@@ -1093,12 +1166,22 @@ export async function capturePostGameShareSnapshot(
   reason: string,
   options: { force?: boolean } = {}
 ): Promise<PostGameShareSnapshot> {
+  const context = currentContext
+  return capturePostGameShareSnapshotForContext(context, lcuService, reason, options)
+}
+
+async function capturePostGameShareSnapshotForContext(
+  context: PostGameShareContext,
+  lcuService: LCUService,
+  reason: string,
+  options: { force?: boolean } = {}
+): Promise<PostGameShareSnapshot> {
   const now = Date.now()
-  if (!options.force && now - liveSnapshotAt < LIVE_SNAPSHOT_THROTTLE_MS) {
-    return currentSnapshot
+  if (!options.force && now - context.liveSnapshotAt < LIVE_SNAPSHOT_THROTTLE_MS) {
+    return context.snapshot
   }
 
-  liveSnapshotAt = now
+  context.liveSnapshotAt = now
 
   try {
     const [liveClientData, gameflowSession, currentSummoner] = await Promise.all([
@@ -1111,15 +1194,17 @@ export async function capturePostGameShareSnapshot(
       const update = await buildSnapshotUpdateFromPayload({
         payload: liveClientData.data,
         source: `liveclientdata:${reason}`,
+        context,
         gameflowSession: gameflowSession?.data,
         currentSummoner,
       })
-      mergeSnapshot(update)
+      mergeSnapshot(context, update)
     } else if (gameflowSession?.data) {
       const championId = getLikelyChampionIdFromGameflowSession(gameflowSession.data)
       if (championId) {
-        mergeSnapshot({
-          champion: await createChampion(championId, currentSnapshot.champion.name),
+        mergeSnapshot(context, {
+          gameId: toPositiveInteger(readNumberByKeys(gameflowSession.data, gameIdKeys)),
+          champion: await createChampion(championId, context.snapshot.champion.name),
           sources: [`gameflow-session:${reason}`],
         })
       }
@@ -1132,10 +1217,14 @@ export async function capturePostGameShareSnapshot(
     })
   }
 
-  return currentSnapshot
+  return context.snapshot
 }
 
-async function captureEndOfGameStats(lcuService: LCUService, reason: string): Promise<void> {
+async function captureEndOfGameStats(
+  context: PostGameShareContext,
+  lcuService: LCUService,
+  reason: string
+): Promise<void> {
   const endpoints = [
     '/lol-end-of-game/v1/eog-stats-block',
     '/lol-end-of-game/v1/gameclient-eog-stats-block',
@@ -1150,8 +1239,19 @@ async function captureEndOfGameStats(lcuService: LCUService, reason: string): Pr
     const update = await buildSnapshotUpdateFromPayload({
       payload: result.data,
       source: `eog:${endpoint}:${reason}`,
+      context,
     })
-    mergeSnapshot(update)
+    if (!update.gameId) {
+      logger.warn('[post-game-share] ignored end-of-game result without game identity', {
+        sessionKey: context.sessionKey,
+        expectedGameId: context.snapshot.gameId,
+        endpoint,
+      })
+      continue
+    }
+    if (!mergeSnapshot(context, update)) {
+      continue
+    }
 
     if (hasAnyStats(update.stats || createEmptyStats())) {
       return
@@ -1162,52 +1262,68 @@ async function captureEndOfGameStats(lcuService: LCUService, reason: string): Pr
 export async function preparePostGameSharePosterData(
   lcuService: LCUService,
   reason: string
-): Promise<{ success: boolean; data: PostGameSharePosterData; error?: string }> {
-  if (preparePosterPromise) {
-    return preparePosterPromise
+): Promise<PreparePosterResult> {
+  const context = currentContext
+  if (context.preparePosterPromise) {
+    return context.preparePosterPromise
   }
 
-  preparePosterPromise = (async () => {
+  let ownPromise!: Promise<PreparePosterResult>
+  ownPromise = (async (): Promise<PreparePosterResult> => {
     try {
-      await capturePostGameShareSnapshot(lcuService, reason, { force: true })
-      await captureEndOfGameStats(lcuService, reason)
-      latestPosterData = await buildPosterData(reason, true)
+      await capturePostGameShareSnapshotForContext(context, lcuService, reason, { force: true })
+      await captureEndOfGameStats(context, lcuService, reason)
+      context.latestPosterData = await buildPosterData(context, reason, true)
       logger.info('[post-game-share] poster data prepared', {
-        status: latestPosterData.status,
-        championId: latestPosterData.champion.id,
-        augmentIds: latestPosterData.augments.map((augment) => augment.id),
-        sources: latestPosterData.sources,
+        sessionKey: context.sessionKey,
+        gameId: context.snapshot.gameId,
+        status: context.latestPosterData.status,
+        championId: context.latestPosterData.champion.id,
+        augmentIds: context.latestPosterData.augments.map((augment) => augment.id),
+        sources: context.latestPosterData.sources,
       })
       return {
         success: true,
-        data: latestPosterData,
+        data: context.latestPosterData,
+        sessionKey: context.sessionKey,
       }
     } catch (error) {
       const err = error as Error
-      logger.warn('[post-game-share] poster data preparation failed:', err.message)
-      const fallback = await buildPosterData(reason, false)
-      latestPosterData = fallback
+      logger.warn('[post-game-share] poster data preparation failed:', {
+        sessionKey: context.sessionKey,
+        error: err.message,
+      })
+      const fallback = await buildPosterData(context, reason, false)
+      context.latestPosterData = fallback
       return {
         success: false,
         data: fallback,
         error: err.message,
+        sessionKey: context.sessionKey,
       }
     } finally {
-      preparePosterPromise = null
+      if (context.preparePosterPromise === ownPromise) {
+        context.preparePosterPromise = null
+      }
     }
   })()
 
-  return preparePosterPromise
+  context.preparePosterPromise = ownPromise
+  return ownPromise
+}
+
+export function isPostGameShareSessionCurrent(sessionKey: string): boolean {
+  return currentContext.sessionKey === sessionKey
 }
 
 export async function getLatestPostGameSharePosterData(
   lcuService: LCUService,
   reason = 'manual'
 ): Promise<{ success: boolean; data: PostGameSharePosterData; error?: string }> {
-  if (latestPosterData && latestPosterData.status !== 'unavailable') {
+  if (currentContext.latestPosterData && currentContext.latestPosterData.status !== 'unavailable') {
     return {
       success: true,
-      data: latestPosterData,
+      data: currentContext.latestPosterData,
     }
   }
 
@@ -1292,7 +1408,8 @@ export async function createMockPostGameSharePosterData(): Promise<{
       championId
     )
 
-    currentSnapshot = {
+    currentContext.snapshot = {
+      gameId: null,
       result: 'victory',
       gameMode: 'ARAM',
       queueName: 'ARAM',
@@ -1316,16 +1433,18 @@ export async function createMockPostGameSharePosterData(): Promise<{
       updatedAt: Date.now(),
     }
 
-    latestPosterData = await hydratePosterImages(await buildPosterData('mock', false))
+    currentContext.latestPosterData = await hydratePosterImages(
+      await buildPosterData(currentContext, 'mock', false)
+    )
     return {
       success: true,
-      data: latestPosterData,
+      data: currentContext.latestPosterData,
     }
   } catch (error) {
     const err = error as Error
     logger.warn('[post-game-share] mock poster generation failed:', err.message)
-    const fallback = await buildPosterData('mock-fallback', false)
-    latestPosterData = fallback
+    const fallback = await buildPosterData(currentContext, 'mock-fallback', false)
+    currentContext.latestPosterData = fallback
     return {
       success: false,
       data: fallback,
