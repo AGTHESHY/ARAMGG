@@ -24,14 +24,27 @@
         <span>路径: {{ penguPath }}</span>
       </div>
 
-      <div v-if="!penguInstalled" class="pengu-hint">
-        <p>需要先安装 Pengu Loader 才能将战绩直接注入英雄联盟客户端。</p>
-        <a href="#" class="pengu-link" @click.prevent="openPenguSite">
-          下载 Pengu Loader
-        </a>
+      <div v-if="!penguInstalled && !penguBundled" class="pengu-hint">
+        <p>Pengu Loader 未安装，且程序未附带 Pengu Loader 文件。请重新安装 ARAMGG 客户端。</p>
+      </div>
+
+      <div v-if="!penguInstalled && penguBundled" class="pengu-hint info">
+        <p>程序已附带 Pengu Loader，点击下方按钮一键安装。</p>
       </div>
 
       <div class="pengu-actions">
+        <button
+          v-if="!penguInstalled && penguBundled"
+          class="pengu-btn primary"
+          type="button"
+          :disabled="installing"
+          @click="installPenguLoader"
+        >
+          <Download v-if="!installing" class="btn-icon" />
+          <RefreshCw v-else class="btn-icon spinning" />
+          <span>{{ installing ? '安装中...' : '安装 Pengu Loader' }}</span>
+        </button>
+
         <button
           v-if="penguInstalled && !pluginInstalled"
           class="pengu-btn primary"
@@ -41,7 +54,7 @@
         >
           <Download v-if="!installing" class="btn-icon" />
           <RefreshCw v-else class="btn-icon spinning" />
-          <span>{{ installing ? '安装中...' : '安装插件' }}</span>
+          <span>{{ installing ? '安装中...' : '安装战绩插件' }}</span>
         </button>
 
         <button
@@ -89,6 +102,7 @@ import { Download, RefreshCw } from 'lucide-vue-next'
 import { electronAPI } from '../native/electron-api'
 
 const penguInstalled = ref(false)
+const penguBundled = ref(false)
 const pluginInstalled = ref(false)
 const penguPath = ref('')
 const installing = ref(false)
@@ -100,12 +114,36 @@ const refreshStatus = async () => {
     const result = await electronAPI.penguPlugin.getStatus()
     if (result.success && result.data) {
       penguInstalled.value = result.data.penguInstalled
+      penguBundled.value = result.data.penguBundled ?? false
       pluginInstalled.value = result.data.pluginInstalled
       penguPath.value = result.data.penguPath || ''
     }
   } catch (e) {
     message.value = '检查状态失败'
     messageError.value = true
+  }
+}
+
+const installPenguLoader = async () => {
+  installing.value = true
+  message.value = ''
+  messageError.value = false
+  try {
+    // 安装 Pengu Loader 和插件是一体的
+    const result = await electronAPI.penguPlugin.installPlugin()
+    if (result.success) {
+      message.value = 'Pengu Loader 和战绩插件安装成功！请重启英雄联盟客户端以激活。'
+      messageError.value = false
+      await refreshStatus()
+    } else {
+      message.value = result.error || '安装失败'
+      messageError.value = true
+    }
+  } catch (e) {
+    message.value = '安装失败'
+    messageError.value = true
+  } finally {
+    installing.value = false
   }
 }
 
@@ -152,12 +190,6 @@ const uninstallPlugin = async () => {
 
 const openPluginsFolder = async () => {
   await electronAPI.penguPlugin.openPluginsFolder()
-}
-
-const openPenguSite = () => {
-  if (typeof window !== 'undefined' && window.open) {
-    window.open('https://github.com/PenguLoader/PenguLoader/releases', '_blank')
-  }
 }
 
 onMounted(() => {
@@ -234,20 +266,15 @@ onMounted(() => {
   margin-bottom: 12px;
 }
 
+.pengu-hint.info {
+  background: rgba(200, 170, 110, 0.08);
+  border-color: rgba(200, 170, 110, 0.2);
+}
+
 .pengu-hint p {
   font-size: 12px;
   color: var(--lol-text-dim, #a09b8c);
-  margin: 0 0 8px 0;
-}
-
-.pengu-link {
-  color: var(--lol-gold, #c8aa6e);
-  font-size: 12px;
-  text-decoration: none;
-}
-
-.pengu-link:hover {
-  text-decoration: underline;
+  margin: 0;
 }
 
 .pengu-actions {

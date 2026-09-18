@@ -82,6 +82,11 @@
         "from": "plugin",
         "to": "plugin",
         "filter": ["**/*"]
+      },
+      {
+        "from": "resources/pengu-loader",
+        "to": "pengu-loader",
+        "filter": ["**/*"]
       }
     ],
     "win": {

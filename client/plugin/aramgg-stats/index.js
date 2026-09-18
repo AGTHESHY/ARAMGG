@@ -1,9 +1,11 @@
 /**
  * @name ARAMGG Stats
- * @version 1.0.0
+ * @version 2.0.0
  * @description 将战绩（胜率、KDA、评分）注入英雄联盟客户端大厅和选人阶段
  * @author ARAMGG
  * @link https://github.com/WJZ-P/aramgg
+ *
+ * 基于 Sona 项目 (https://github.com/WJZ-P/sona) 的 SGP 战绩查询方案移植。
  */
 
 // ==================== 设置 ====================
@@ -29,7 +31,7 @@ async function loadSettings() {
       log('Settings updated:', pluginSettings)
       applySettingsDiff(prev)
     }
-  } catch (e) {
+  } catch {
     // settings.json 不存在或无法访问时使用默认值
   } finally {
     settingsFetchInProgress = false
@@ -63,14 +65,68 @@ const PLAYER_KEY_ATTR = 'data-aramgg-player-key'
 const FETCH_COUNT = 50
 
 // ==================== 日志 ====================
-function log(...args) {
-  console.log('[ARAMGG]', ...args)
+function log(...args) { console.log('[ARAMGG]', ...args) }
+function warn(...args) { console.warn('[ARAMGG]', ...args) }
+function error(...args) { console.error('[ARAMGG]', ...args) }
+
+// ==================== SGP 服务器配置 ====================
+// 数据来源：Sona 项目 → LeagueAkari 项目
+const SGP_SERVERS = {
+  TENCENT_HN1:   { matchHistory: 'https://hn1-k8s-sgp.lol.qq.com:21019',   common: 'https://hn1-k8s-sgp.lol.qq.com:21019' },
+  TENCENT_HN10:  { matchHistory: 'https://hn10-k8s-sgp.lol.qq.com:21019',  common: 'https://hn10-k8s-sgp.lol.qq.com:21019' },
+  TENCENT_TJ100: { matchHistory: 'https://tj100-sgp.lol.qq.com:21019',     common: 'https://tj100-sgp.lol.qq.com:21019' },
+  TENCENT_TJ101: { matchHistory: 'https://tj101-sgp.lol.qq.com:21019',     common: 'https://tj101-sgp.lol.qq.com:21019' },
+  TENCENT_NJ100: { matchHistory: 'https://nj100-sgp.lol.qq.com:21019',     common: 'https://nj100-sgp.lol.qq.com:21019' },
+  TENCENT_GZ100: { matchHistory: 'https://gz100-sgp.lol.qq.com:21019',     common: 'https://gz100-sgp.lol.qq.com:21019' },
+  TENCENT_CQ100: { matchHistory: 'https://cq100-sgp.lol.qq.com:21019',     common: 'https://cq100-sgp.lol.qq.com:21019' },
+  TENCENT_BGP2:  { matchHistory: 'https://bgp2-k8s-sgp.lol.qq.com:21019',  common: 'https://bgp2-k8s-sgp.lol.qq.com:21019' },
+  TENCENT_PBE:   { matchHistory: 'https://pbe-sgp.lol.qq.com:21019',       common: 'https://pbe-sgp.lol.qq.com:21019' },
+  TENCENT_PREPBE:{ matchHistory: 'https://prepbe-sgp.lol.qq.com:21019',    common: 'https://prepbe-sgp.lol.qq.com:21019' },
+  TW2:  { matchHistory: 'https://apse1-red.pp.sgp.pvp.net',  common: 'https://tw2-red.lol.sgp.pvp.net' },
+  SG2:  { matchHistory: 'https://apse1-red.pp.sgp.pvp.net',  common: 'https://sg2-red.lol.sgp.pvp.net' },
+  PH2:  { matchHistory: 'https://apse1-red.pp.sgp.pvp.net',  common: 'https://ph2-red.lol.sgp.pvp.net' },
+  VN2:  { matchHistory: 'https://apse1-red.pp.sgp.pvp.net',  common: 'https://vn2-red.lol.sgp.pvp.net' },
+  TH2:  { matchHistory: 'https://apse1-red.pp.sgp.pvp.net',  common: 'https://th2-red.lol.sgp.pvp.net' },
+  JP1:  { matchHistory: 'https://apne1-red.pp.sgp.pvp.net',  common: 'https://jp-red.lol.sgp.pvp.net' },
+  KR:   { matchHistory: 'https://apne1-red.pp.sgp.pvp.net',  common: 'https://kr-red.lol.sgp.pvp.net' },
+  NA1:  { matchHistory: 'https://usw2-red.pp.sgp.pvp.net',   common: 'https://na-red.lol.sgp.pvp.net' },
+  BR1:  { matchHistory: 'https://usw2-red.pp.sgp.pvp.net',   common: 'https://br-red.lol.sgp.pvp.net' },
+  LA1:  { matchHistory: 'https://usw2-red.pp.sgp.pvp.net',   common: 'https://lan-red.lol.sgp.pvp.net' },
+  LA2:  { matchHistory: 'https://usw2-red.pp.sgp.pvp.net',   common: 'https://las-red.lol.sgp.pvp.net' },
+  OC1:  { matchHistory: 'https://apse1-red.pp.sgp.pvp.net',  common: 'https://oce-red.lol.sgp.pvp.net' },
+  EUW:  { matchHistory: 'https://euc1-red.pp.sgp.pvp.net',   common: 'https://euw-red.lol.sgp.pvp.net' },
+  EUN1: { matchHistory: 'https://euc1-red.pp.sgp.pvp.net',   common: 'https://eun1-red.lol.sgp.pvp.net' },
+  TR1:  { matchHistory: 'https://euc1-red.pp.sgp.pvp.net',   common: 'https://tr-red.lol.sgp.pvp.net' },
+  RU:   { matchHistory: 'https://euc1-red.pp.sgp.pvp.net',   common: 'https://ru-red.lol.sgp.pvp.net' },
+  PBE:  { matchHistory: 'https://usw2-red.pp.sgp.pvp.net',   common: 'https://pbe-red.lol.sgp.pvp.net' },
+  EUC1:  { matchHistory: 'https://euc1-red.pp.sgp.pvp.net',   common: null },
+  USW2:  { matchHistory: 'https://usw2-red.pp.sgp.pvp.net',   common: null },
+  APSE1: { matchHistory: 'https://apse1-red.pp.sgp.pvp.net',  common: null },
+  APNE1: { matchHistory: 'https://apne1-red.pp.sgp.pvp.net',  common: null },
 }
-function warn(...args) {
-  console.warn('[ARAMGG]', ...args)
+
+const PLATFORM_ID_TO_SGP_KEY = {
+  EUW1: 'EUW', EUN: 'EUN1', EUNE: 'EUN1', EUN1: 'EUN1', RU1: 'RU',
+  NA: 'NA1', OCE: 'OC1', BR1: 'BR1', JP1: 'JP1', KR: 'KR',
+  LA1: 'LA1', LA2: 'LA2', OC1: 'OC1', TR1: 'TR1', TW2: 'TW2',
+  SG2: 'SG2', PH2: 'PH2', VN2: 'VN2', TH2: 'TH2', PBE: 'PBE',
 }
-function error(...args) {
-  console.error('[ARAMGG]', ...args)
+
+const TENCENT_PLATFORM_IDS = new Set([
+  'HN1','HN2','HN3','HN4','HN5','HN6','HN7','HN8','HN9',
+  'HN10','HN11','HN12','HN13','HN14','HN15','HN16','HN17','HN18','HN19',
+  'WT1','WT2','WT3','WT4','WT5','WT6','WT7','EDU1','BGP1','BGP2',
+  'NJ100','GZ100','CQ100','TJ100','TJ101','PBE','PREPBE',
+])
+
+function normalizeSgpServerKey(rawCode) {
+  const code = rawCode.toUpperCase()
+  const mapped = PLATFORM_ID_TO_SGP_KEY[code] ?? code
+  return SGP_SERVERS[mapped] ? mapped : ''
+}
+
+function queueIdToTag(queueId) {
+  return queueId > 0 ? `q_${queueId}` : ''
 }
 
 // ==================== LCU API ====================
@@ -84,15 +140,150 @@ async function lcuGet(endpoint) {
   return text ? JSON.parse(text) : null
 }
 
-async function lcuPost(endpoint, body) {
-  const url = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
+// ==================== Entitlements Token ====================
+let _entitlementsToken = null
+
+async function getEntitlementsToken() {
+  if (_entitlementsToken) return _entitlementsToken
+  const token = await lcuGet('/entitlements/v1/token')
+  _entitlementsToken = token
+  return token
+}
+
+async function getChatMe() {
+  return lcuGet('/lol-chat/v1/me')
+}
+
+// ==================== SGP 服务器 ID 解析 ====================
+async function getSgpServerId() {
+  // 优先使用 /lol-chat/v1/me 的 platformId
+  const fromPlatformId = await parseSgpServerIdFromPlatformId()
+  if (fromPlatformId) return fromPlatformId
+
+  // Fallback: 从 issuer 解析
+  const fromIssuer = parseSgpServerIdFromIssuer()
+  if (fromIssuer) return fromIssuer
+
+  return ''
+}
+
+async function parseSgpServerIdFromPlatformId() {
+  try {
+    const me = await getChatMe()
+    const platformId = (me?.platformId || '').toUpperCase()
+    if (!platformId) return ''
+    if (TENCENT_PLATFORM_IDS.has(platformId)) {
+      return normalizeSgpServerKey(`TENCENT_${platformId}`)
+    }
+    return normalizeSgpServerKey(platformId)
+  } catch {
+    return ''
+  }
+}
+
+function parseSgpServerIdFromIssuer() {
+  if (!_entitlementsToken) return ''
+  const issuer = _entitlementsToken.issuer || ''
+
+  // 国服: http://hn1-k8s-bcs-internal.lol.qq.com:28088
+  const tencentMatch = issuer.match(/https?:\/\/([a-z0-9]+)(?:-[a-z0-9]+)*\.lol\.qq\.com/)
+  if (tencentMatch) {
+    const serverCode = tencentMatch[1].toUpperCase()
+    return normalizeSgpServerKey(`TENCENT_${serverCode}`)
+  }
+
+  // 外服: https://euw1-red.lol.sgp.pvp.net
+  const externalMatch = issuer.match(/https?:\/\/([a-z0-9]+)-[a-z0-9]+\.lol\.sgp\.pvp\.net/)
+    ?? issuer.match(/https?:\/\/([a-z0-9]+)-[a-z0-9]+\.(?:lol\.)?sgp\.pvp\.net/)
+    ?? issuer.match(/https?:\/\/([a-z0-9]+)-/)
+  if (externalMatch) {
+    const rawCode = externalMatch[1].toUpperCase()
+    return normalizeSgpServerKey(rawCode)
+  }
+
+  return ''
+}
+
+// ==================== SGP 战绩查询 ====================
+async function fetchSgpMatchHistory(puuid, options) {
+  const startIndex = options?.startIndex ?? 0
+  const count = options?.count ?? FETCH_COUNT
+  const tag = options?.tag || undefined
+
+  try {
+    const token = await getEntitlementsToken()
+    const sgpServerId = await getSgpServerId()
+    const server = SGP_SERVERS[sgpServerId.toUpperCase()]
+    if (!server?.matchHistory) {
+      throw new Error(`[SGP] 找不到服务器配置: ${sgpServerId}`)
+    }
+
+    const params = new URLSearchParams()
+    params.set('startIndex', String(startIndex))
+    params.set('count', String(count))
+    if (tag) params.set('tag', tag)
+
+    const url = `${server.matchHistory}/match-history-query/v1/products/lol/player/${puuid}/SUMMARY?${params}`
+
+    const resp = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token.accessToken}`,
+        'User-Agent': 'LeagueOfLegendsClient/14.13.596.7996 (rcp-be-lol-match-history)',
+      },
+    })
+
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => '')
+      throw new Error(`[SGP] 请求失败: ${resp.status} ${resp.statusText} ${body.slice(0, 500)}`)
+    }
+
+    const data = await resp.json()
+    return data?.games ?? []
+  } catch (e) {
+    warn('[SGP] 战绩查询失败，回退到客户端原生战绩接口:', e.message)
+    return fetchNativeMatchHistory(puuid, startIndex, count, tag)
+  }
+}
+
+async function fetchNativeMatchHistory(puuid, startIndex, count, tag) {
+  try {
+    const queueId = tag ? parseInt(tag.replace('q_', ''), 10) || 0 : 0
+    const begIndex = queueId ? 0 : startIndex
+    const endIndex = queueId ? 99 : startIndex + count - 1
+    const data = await lcuGet(`/lol-match-history/v1/products/lol/${puuid}/matches?begIndex=${begIndex}&endIndex=${endIndex}`)
+    const games = data?.games?.games ?? []
+    const filtered = queueId ? games.filter(g => g.queueId === queueId).slice(startIndex, startIndex + count) : games
+    // 将原生格式映射为 SGP 格式
+    return filtered.map(game => mapNativeToSgpGame(game))
+  } catch (e) {
+    warn('Native match history fetch failed:', e)
+    return []
+  }
+}
+
+function mapNativeToSgpGame(game) {
+  const identitiesByPid = new Map()
+  for (const id of (game.participantIdentities || [])) {
+    identitiesByPid.set(id.participantId, id)
+  }
+  const participants = (game.participants || []).map(p => {
+    const identity = identitiesByPid.get(p.participantId)
+    const stats = p.stats || {}
+    return {
+      puuid: identity?.player?.puuid || '',
+      kills: stats.kills || 0,
+      deaths: stats.deaths || 0,
+      assists: stats.assists || 0,
+      win: stats.win || false,
+    }
   })
-  if (!resp.ok) throw new Error(`LCU POST ${resp.status}: ${url}`)
-  return resp.status === 204 ? null : resp.json()
+  return {
+    json: {
+      queueId: game.queueId,
+      gameDuration: game.gameDuration,
+      participants,
+    },
+  }
 }
 
 // ==================== InjectorManager ====================
@@ -153,48 +344,33 @@ function getTierConfig(winRate) {
 }
 
 // ==================== 战绩获取与计算 ====================
-async function fetchMatchHistory(puuid) {
-  try {
-    const data = await lcuGet(`/lol-match-history/v1/products/lol/${puuid}/matches?begIndex=0&endIndex=${FETCH_COUNT - 1}`)
-    return data?.games?.games ?? []
-  } catch (e) {
-    warn(`Failed to fetch match history for ${puuid}:`, e)
-    return []
-  }
+async function fetchMatchHistory(puuid, queueId) {
+  const tag = queueId > 0 ? queueIdToTag(queueId) : undefined
+  const games = await fetchSgpMatchHistory(puuid, { startIndex: 0, count: FETCH_COUNT, tag })
+  return games
 }
 
-function findParticipant(game, puuid) {
-  const identities = game.participantIdentities || []
-  const identity = identities.find(id => id?.player?.puuid === puuid)
-  if (!identity) return null
-  const pid = identity.participantId
-  return (game.participants || []).find(p => p?.participantId === pid) || null
-}
-
-function getParticipantStats(participant) {
-  if (!participant) return null
-  const stats = participant.stats || participant
-  return {
-    kills: stats.kills || 0,
-    deaths: stats.deaths || 0,
-    assists: stats.assists || 0,
-    win: stats.win || false,
-  }
+function findSgpParticipant(game, puuid) {
+  const participants = game?.json?.participants || []
+  return participants.find(p => p?.puuid === puuid) || null
 }
 
 function calculateStats(games, puuid, queueId) {
   let total = 0, wins = 0, kills = 0, deaths = 0, assists = 0
 
   for (const game of games) {
-    if (queueId && game.queueId !== queueId) continue
-    const participant = findParticipant(game, puuid)
-    const stats = getParticipantStats(participant)
-    if (!stats) continue
+    // SGP 格式: game.json.queueId; 原生格式已映射为 game.json.queueId
+    const gameQueueId = game?.json?.queueId ?? 0
+    if (queueId && gameQueueId !== queueId) continue
+
+    const participant = findSgpParticipant(game, puuid)
+    if (!participant) continue
+
     total++
-    if (stats.win) wins++
-    kills += stats.kills
-    deaths += stats.deaths
-    assists += stats.assists
+    if (participant.win) wins++
+    kills += participant.kills || 0
+    deaths += participant.deaths || 0
+    assists += participant.assists || 0
   }
 
   if (total === 0) return null
@@ -205,6 +381,7 @@ function calculateStats(games, puuid, queueId) {
   const avgD = deaths / total
   const avgA = assists / total
 
+  // 评分公式（与 Sona 近似，范围 3.0–16.0）
   const score = 6.0 + winRate * 5.0 + Math.min(kda, 6) * 0.8
 
   return { winRate, kda, score, total, wins, avgK, avgD, avgA }
@@ -298,7 +475,7 @@ async function refreshLobbyStats() {
   const nextStats = new Map()
   await Promise.all(members.map(async member => {
     try {
-      const games = await fetchMatchHistory(member.puuid)
+      const games = await fetchMatchHistory(member.puuid, lobbyQueueId)
       const stats = calculateStats(games, member.puuid, lobbyQueueId)
       if (stats) nextStats.set(member.puuid, stats)
     } catch (e) {
@@ -468,7 +645,6 @@ function tryInjectChampSelectStats() {
       if (!iconContainer.hasAttribute(CLICK_ATTR) && stat.puuid) {
         iconContainer.setAttribute(CLICK_ATTR, 'true')
         iconContainer.style.cursor = 'pointer'
-        const boundKey = playerKey
         const clickHandler = (e) => {
           const target = e.target
           if (target instanceof Element && target.closest('.swap-button-component, .swap-button-btn')) return
@@ -553,7 +729,7 @@ async function applyChampSelectStats() {
         winRate: null, wins: 0, total: 0, avgK: 0, avgD: 0, avgA: 0, kdaNum: 0, score: 0,
       }
       try {
-        const games = await fetchMatchHistory(puuid)
+        const games = await fetchMatchHistory(puuid, queueId)
         const s = calculateStats(games, puuid, queueId)
         if (!s) return {
           floor: i + 1, summonerId: player.summonerId, puuid,

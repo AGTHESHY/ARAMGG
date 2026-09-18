@@ -7,6 +7,32 @@ import { logger } from './logger'
 const PLUGIN_DIR_NAME = 'aramgg-stats'
 const PLUGIN_ENTRY = 'index.js'
 
+// ==================== 路径解析 ====================
+
+/** 程序自带的 Pengu Loader 安装包路径 */
+function getBundledPenguLoaderPath(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'pengu-loader')
+    : path.join(__dirname, '..', '..', 'resources', 'pengu-loader')
+}
+
+/** 程序自带的 aramgg-stats 插件路径 */
+function getBundledPluginPath(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'plugin', PLUGIN_DIR_NAME, PLUGIN_ENTRY)
+    : path.join(__dirname, '..', '..', 'plugin', PLUGIN_DIR_NAME, PLUGIN_ENTRY)
+}
+
+/** 检查是否已自带 Pengu Loader */
+function isPenguLoaderBundled(): boolean {
+  try {
+    return fs.existsSync(getBundledPenguLoaderPath())
+  } catch {
+    return false
+  }
+}
+
+/** 查找已安装的 Pengu Loader 路径 */
 async function findPenguLoaderPath(): Promise<string | null> {
   const candidates = [
     path.join(app.getPath('appData'), 'Pengu Loader'),
@@ -57,16 +83,75 @@ async function findPenguLoaderPath(): Promise<string | null> {
   return null
 }
 
-function getBundledPluginPath(): string {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, 'plugin', PLUGIN_DIR_NAME, PLUGIN_ENTRY)
-    : path.join(__dirname, '..', '..', 'plugin', PLUGIN_DIR_NAME, PLUGIN_ENTRY)
+// ==================== Pengu Loader 安装 ====================
+
+/**
+ * 从程序自带目录安装 Pengu Loader。
+ * 将 bundled 目录中的所有文件复制到目标安装路径。
+ */
+async function installBundledPenguLoader(): Promise<string> {
+  const bundledPath = getBundledPenguLoaderPath()
+  if (!fs.existsSync(bundledPath)) {
+    throw new Error('程序未附带 Pengu Loader 文件')
+  }
+
+  // 安装到 %APPDATA%\Pengu Loader
+  const targetPath = path.join(app.getPath('appData'), 'Pengu Loader')
+
+  // 如果已存在先移除旧文件
+  if (fs.existsSync(targetPath)) {
+    fs.rmSync(targetPath, { recursive: true, force: true })
+  }
+
+  // 递归复制
+  copyDirRecursive(bundledPath, targetPath)
+
+  // 确保 plugins 目录存在
+  const pluginsDir = path.join(targetPath, 'plugins')
+  fs.mkdirSync(pluginsDir, { recursive: true })
+
+  logger.info('[PenguPlugin] Pengu Loader installed to:', targetPath)
+  return targetPath
 }
+
+function copyDirRecursive(src: string, dest: string): void {
+  fs.mkdirSync(dest, { recursive: true })
+  const entries = fs.readdirSync(src, { withFileTypes: true })
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name)
+    const destPath = path.join(dest, entry.name)
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, destPath)
+    } else {
+      fs.copyFileSync(srcPath, destPath)
+    }
+  }
+}
+
+/**
+ * 确保 Pengu Loader 已安装。如果未安装且程序自带，则自动安装。
+ * 返回 Pengu Loader 的安装路径。
+ */
+async function ensurePenguLoader(): Promise<string> {
+  // 先检查是否已安装
+  const existing = await findPenguLoaderPath()
+  if (existing) return existing
+
+  // 未安装，尝试从程序自带目录安装
+  if (!isPenguLoaderBundled()) {
+    throw new Error('Pengu Loader 未安装，且程序未附带 Pengu Loader 文件')
+  }
+
+  return installBundledPenguLoader()
+}
+
+// ==================== 状态查询 ====================
 
 export async function getPenguPluginStatus() {
   try {
     const penguPath = await findPenguLoaderPath()
     const penguInstalled = penguPath !== null
+    const penguBundled = isPenguLoaderBundled()
     const pluginsDir = penguPath ? path.join(penguPath, 'plugins') : null
     const pluginPath = pluginsDir ? path.join(pluginsDir, PLUGIN_DIR_NAME, PLUGIN_ENTRY) : null
     const pluginInstalled = pluginPath ? fs.existsSync(pluginPath) : false
@@ -75,6 +160,7 @@ export async function getPenguPluginStatus() {
       success: true,
       data: {
         penguInstalled,
+        penguBundled,
         pluginInstalled,
         pluginPath: pluginPath ?? undefined,
         penguPath: penguPath ?? undefined,
@@ -86,11 +172,17 @@ export async function getPenguPluginStatus() {
   }
 }
 
+// ==================== 插件安装/卸载 ====================
+
 export async function installPenguPlugin() {
   try {
-    const penguPath = await findPenguLoaderPath()
+    // 确保 Pengu Loader 已安装（自动从程序自带目录安装）
+    let penguPath = await findPenguLoaderPath()
     if (!penguPath) {
-      return { success: false, error: '未找到 Pengu Loader，请先安装 Pengu Loader' }
+      if (!isPenguLoaderBundled()) {
+        return { success: false, error: 'Pengu Loader 未安装，且程序未附带 Pengu Loader 文件' }
+      }
+      penguPath = await installBundledPenguLoader()
     }
 
     const pluginsDir = path.join(penguPath, 'plugins')
@@ -106,10 +198,10 @@ export async function installPenguPlugin() {
     fs.copyFileSync(sourceFile, targetFile)
 
     logger.info('[PenguPlugin] Plugin installed to:', targetFile)
-    return { success: true, data: { pluginPath: targetFile } }
+    return { success: true, data: { pluginPath: targetFile, penguPath } }
   } catch (error) {
     logger.error('[PenguPlugin] Install failed:', error)
-    return { success: false, error: `安装插件失败: ${error instanceof Error ? error.message : String(error)}` }
+    return { success: false, error: `安装失败: ${error instanceof Error ? error.message : String(error)}` }
   }
 }
 
@@ -151,9 +243,12 @@ export async function openPluginsFolder() {
 
 export async function writePenguPluginSettings(settings: Record<string, unknown>) {
   try {
-    const penguPath = await findPenguLoaderPath()
+    let penguPath = await findPenguLoaderPath()
     if (!penguPath) {
-      return { success: false, error: '未找到 Pengu Loader' }
+      if (!isPenguLoaderBundled()) {
+        return { success: false, error: 'Pengu Loader 未安装，且程序未附带' }
+      }
+      penguPath = await installBundledPenguLoader()
     }
     const pluginDir = path.join(penguPath, 'plugins', PLUGIN_DIR_NAME)
     fs.mkdirSync(pluginDir, { recursive: true })
