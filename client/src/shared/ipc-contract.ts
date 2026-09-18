@@ -641,6 +641,12 @@ export interface ElectronAPI {
     toggleMod(filename: string, enabled: boolean): Promise<OperationResult>
     deleteMod(filename: string): Promise<OperationResult>
   }
+  penguPlugin: {
+    getStatus(): Promise<OperationResult & { data?: { penguInstalled: boolean; pluginInstalled: boolean; pluginPath?: string; penguPath?: string } }>
+    installPlugin(): Promise<OperationResult & { data?: { pluginPath: string } }>
+    uninstallPlugin(): Promise<OperationResult>
+    openPluginsFolder(): Promise<OperationResult>
+  }
   lcu: {
     getChampionMonitorState(): Promise<ChampionMonitorState>
     getChampionId(): Promise<LcuChampionIdResult>

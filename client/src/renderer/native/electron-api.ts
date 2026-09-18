@@ -93,6 +93,12 @@ export const electronAPI: ElectronAPI = {
     toggleMod: (...args) => requireElectronAPI().skinRuntime.toggleMod(...args),
     deleteMod: (...args) => requireElectronAPI().skinRuntime.deleteMod(...args),
   },
+  penguPlugin: {
+    getStatus: (...args) => requireElectronAPI().penguPlugin.getStatus(...args),
+    installPlugin: (...args) => requireElectronAPI().penguPlugin.installPlugin(...args),
+    uninstallPlugin: (...args) => requireElectronAPI().penguPlugin.uninstallPlugin(...args),
+    openPluginsFolder: (...args) => requireElectronAPI().penguPlugin.openPluginsFolder(...args),
+  },
   lcu: {
     getChampionMonitorState: () => requireElectronAPI().lcu.getChampionMonitorState(),
     getChampionId: (...args) => requireElectronAPI().lcu.getChampionId(...args),

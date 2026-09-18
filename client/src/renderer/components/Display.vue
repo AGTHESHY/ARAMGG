@@ -138,6 +138,7 @@
 
                         <!-- 设置 -->
                         <div v-if="activeNav === 'settings'" class="nav-section">
+                            <PenguPluginPanel />
                             <div class="status-strip">
                                 <div class="status-grid">
                                     <div>
@@ -429,6 +430,7 @@ import MatchHistoryPanel from './MatchHistoryPanel.vue'
 import MatchPreferences from './MatchPreferences.vue'
 import SkinCenter from './SkinCenter.vue'
 import LobbyStatsPanel from './LobbyStatsPanel.vue'
+import PenguPluginPanel from './PenguPluginPanel.vue'
 import PostGameShareModal from './PostGameShareModal.vue'
 import {
     Select,

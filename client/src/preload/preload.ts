@@ -145,6 +145,12 @@ const electronAPI: ElectronAPI = {
     toggleMod: (filename, enabled) => ipcRenderer.invoke('skin-runtime-toggle-mod', filename, enabled),
     deleteMod: (filename) => ipcRenderer.invoke('skin-runtime-delete-mod', filename),
   },
+  penguPlugin: {
+    getStatus: () => ipcRenderer.invoke('pengu-plugin-get-status'),
+    installPlugin: () => ipcRenderer.invoke('pengu-plugin-install'),
+    uninstallPlugin: () => ipcRenderer.invoke('pengu-plugin-uninstall'),
+    openPluginsFolder: () => ipcRenderer.invoke('pengu-plugin-open-folder'),
+  },
   lcu: {
     getChampionMonitorState: () => ipcRenderer.invoke('lcu-get-champion-monitor-state'),
     getChampionId: () => ipcRenderer.invoke('get-champion-id'),

@@ -46,6 +46,7 @@ import { getAramBenchRecommendation } from '../services/aram/bench-recommendatio
 import { registerPreferencesIpcHandlers } from '../ipc/preferences-handlers.ts'
 import { registerSystemIpcHandlers } from '../ipc/system-handlers.ts'
 import { trustedIpcMain as ipcMain } from '../security/trusted-ipc.ts'
+import { registerPenguPluginIpcHandlers } from './pengu-plugin-manager.ts'
 import {
     clearPreparedSkin,
     installSkinRuntimeDll,
@@ -377,6 +378,7 @@ async function buildRandomBenchRecommendation(currentChampionId: number | null =
 export function registerIpcHandlers(isDev: boolean): void {
     registerPreferencesIpcHandlers()
     registerSystemIpcHandlers()
+    registerPenguPluginIpcHandlers()
     ipcMain.handle('skin-runtime-get-state', () => refreshSkinRuntimeState())
     ipcMain.handle('skin-runtime-prepare', (_event, selection) => prepareSkin(selection))
     ipcMain.handle('skin-runtime-clear', () => clearPreparedSkin())

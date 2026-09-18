@@ -77,6 +77,11 @@
         "from": "resources/skin-runtime",
         "to": "skin-runtime",
         "filter": ["**/*"]
+      },
+      {
+        "from": "plugin",
+        "to": "plugin",
+        "filter": ["**/*"]
       }
     ],
     "win": {
