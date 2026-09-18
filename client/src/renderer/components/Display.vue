@@ -204,6 +204,7 @@
                     </div>
                 </div>
 
+                <AccountAndSharing />
                 <ItemSetInstaller />
                 <OverlayPreferences
                     @post-game-auto-show-changed="setPostGameShareAutoShowEnabled"
@@ -380,6 +381,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import ItemSetInstaller from './ItemSetInstaller.vue'
+import AccountAndSharing from './AccountAndSharing.vue'
 import OverlayPreferences from './OverlayPreferences.vue'
 import ChampionMonitor from './ChampionMonitor.vue'
 import MatchHistoryPanel from './MatchHistoryPanel.vue'

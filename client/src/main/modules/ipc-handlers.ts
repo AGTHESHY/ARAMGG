@@ -48,6 +48,15 @@ import { registerSystemIpcHandlers } from '../ipc/system-handlers.ts'
 import { trustedIpcMain as ipcMain } from '../security/trusted-ipc.ts'
 import { shouldRaiseOverlayWindow } from './overlay-window-state.ts'
 import { deleteDeveloperKey, getDeveloperKeyStatus, saveDeveloperKey } from '../services/developer-key-service.ts'
+import {
+    getAccountStatus,
+    loginAccount,
+    logoutAccount,
+    registerAccount,
+    revokeAccountKey,
+    saveAccountKey,
+    updateAccountSharing,
+} from '../services/account-service.ts'
 
 const TEST_AUGMENT_COUNT = 3
 const TEST_BENCH_CHAMPION_COUNT = 8
@@ -362,6 +371,13 @@ export function registerIpcHandlers(isDev: boolean): void {
     ipcMain.handle('developer-key-status', () => getDeveloperKeyStatus())
     ipcMain.handle('developer-key-save', (_event, key) => saveDeveloperKey(key))
     ipcMain.handle('developer-key-delete', () => deleteDeveloperKey())
+    ipcMain.handle('account-status', () => getAccountStatus())
+    ipcMain.handle('account-register', (_event, email, password) => registerAccount(email, password))
+    ipcMain.handle('account-login', (_event, email, password) => loginAccount(email, password))
+    ipcMain.handle('account-logout', () => logoutAccount())
+    ipcMain.handle('account-save-key', (_event, key, shareEnabled, dailyLimit) => saveAccountKey(key, shareEnabled, dailyLimit))
+    ipcMain.handle('account-update-sharing', (_event, enabled, dailyLimit) => updateAccountSharing(enabled, dailyLimit))
+    ipcMain.handle('account-revoke-key', () => revokeAccountKey())
 
     ipcMain.on('renderer-ready', (event) => markRendererReady(event.sender))
 

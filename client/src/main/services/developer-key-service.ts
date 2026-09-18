@@ -18,6 +18,14 @@ export async function getDeveloperKeyStatus() {
   }
 }
 
+export async function getDeveloperKey() {
+  const encrypted = await readFile(keyFile())
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('SECURE_STORAGE_UNAVAILABLE')
+  const key = safeStorage.decryptString(encrypted)
+  if (!keyPattern.test(key)) throw new Error('INVALID_DEVELOPER_KEY')
+  return key
+}
+
 export async function saveDeveloperKey(value: unknown) {
   const key = typeof value === 'string' ? value.trim() : ''
   if (!keyPattern.test(key)) throw new Error('INVALID_DEVELOPER_KEY')

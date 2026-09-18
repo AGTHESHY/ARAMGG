@@ -23,6 +23,15 @@ export const electronAPI: ElectronAPI = {
     save: (...args) => requireElectronAPI().developerKey.save(...args),
     delete: (...args) => requireElectronAPI().developerKey.delete(...args),
   },
+  account: {
+    getStatus: (...args) => requireElectronAPI().account.getStatus(...args),
+    register: (...args) => requireElectronAPI().account.register(...args),
+    login: (...args) => requireElectronAPI().account.login(...args),
+    logout: (...args) => requireElectronAPI().account.logout(...args),
+    saveKey: (...args) => requireElectronAPI().account.saveKey(...args),
+    updateSharing: (...args) => requireElectronAPI().account.updateSharing(...args),
+    revokeKey: (...args) => requireElectronAPI().account.revokeKey(...args),
+  },
   windows: {
     ready: () => requireElectronAPI().windows.ready(),
     showPopup: (...args) => requireElectronAPI().windows.showPopup(...args),

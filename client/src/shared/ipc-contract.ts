@@ -40,6 +40,23 @@ export interface OperationResult extends LooseRecord {
   error?: string
 }
 
+export interface AccountStatus {
+  signedIn: boolean
+  secureTransport: boolean
+  serviceOrigin: string
+  localKey: { configured: boolean; usable: boolean }
+  sharedKey: {
+    configured: boolean
+    shareEnabled: boolean
+    dailyShareLimit?: number
+    creditsUsedToday?: number
+    fingerprint?: string
+    lastUsedAt?: string | null
+    status?: string
+  } | null
+  serviceError?: string
+}
+
 /** A locally collected champion + augment/item outcome aggregate. */
 export interface LocalMatchHistoryStat extends LooseRecord {
   championId: number
@@ -372,6 +389,15 @@ export interface ElectronAPI {
     getStatus(): Promise<{ configured: boolean; usable: boolean }>
     save(key: string): Promise<{ configured: boolean; usable: boolean }>
     delete(): Promise<{ configured: boolean; usable: boolean }>
+  }
+  account: {
+    getStatus(): Promise<AccountStatus>
+    register(email: string, password: string): Promise<AccountStatus>
+    login(email: string, password: string): Promise<AccountStatus>
+    logout(): Promise<AccountStatus>
+    saveKey(key: string, shareEnabled: boolean, dailyLimit: number): Promise<AccountStatus>
+    updateSharing(enabled: boolean, dailyLimit: number): Promise<AccountStatus>
+    revokeKey(): Promise<AccountStatus>
   }
   windows: {
     ready(): void

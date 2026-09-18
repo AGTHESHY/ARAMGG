@@ -75,6 +75,7 @@
       }
     ],
     "win": {
+      "requestedExecutionLevel": "requireAdministrator",
       "verifyUpdateCodeSignature": false,
       "target": [
         {

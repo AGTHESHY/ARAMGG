@@ -72,6 +72,15 @@ const electronAPI: ElectronAPI = {
     save: (key) => ipcRenderer.invoke('developer-key-save', key),
     delete: () => ipcRenderer.invoke('developer-key-delete'),
   },
+  account: {
+    getStatus: () => ipcRenderer.invoke('account-status'),
+    register: (email, password) => ipcRenderer.invoke('account-register', email, password),
+    login: (email, password) => ipcRenderer.invoke('account-login', email, password),
+    logout: () => ipcRenderer.invoke('account-logout'),
+    saveKey: (key, shareEnabled, dailyLimit) => ipcRenderer.invoke('account-save-key', key, shareEnabled, dailyLimit),
+    updateSharing: (enabled, dailyLimit) => ipcRenderer.invoke('account-update-sharing', enabled, dailyLimit),
+    revokeKey: () => ipcRenderer.invoke('account-revoke-key'),
+  },
   windows: {
     ready: () => ipcRenderer.send('renderer-ready'),
     showPopup: (data) => ipcRenderer.send('show-popup', data),
