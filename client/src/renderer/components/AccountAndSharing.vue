@@ -44,7 +44,10 @@
 
     <form class="key-form" @submit.prevent="saveKey">
       <label>
-        <span>{{ t('account.syncKey') }}</span>
+        <span class="sync-key-label">
+          {{ t('account.syncKey') }}
+          <a class="api-link" :href="DATA_API_URL" @click.prevent="openDataApi">（开放API）</a>
+        </span>
         <input v-model.trim="apiKey" type="password" autocomplete="off" placeholder="hx_live_…" :required="!status?.localKey.configured" />
         <small>{{ status?.localKey.configured ? t('account.keySaved') : t('account.keyPrivacy') }}</small>
       </label>
@@ -88,6 +91,16 @@ import { electronAPI } from '../native/electron-api.ts'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
+
+const DATA_API_URL = 'https://data.dtodo.cn'
+
+const openDataApi = async () => {
+  try {
+    await electronAPI.shell.openExternal(DATA_API_URL)
+  } catch (error) {
+    console.warn('Failed to open data API:', error)
+  }
+}
 
 const status = ref<AccountStatus | null>(null)
 const mode = ref<'login' | 'register'>('login')
@@ -197,4 +210,8 @@ button:disabled { opacity:.45; cursor:not-allowed; }
 .danger-action { color:#d98278; }
 .result-message.success { border-color:#55b47c; color:#75d49d; background:rgba(66,166,112,.09); }
 .result-message.error { border-color:#c65d55; color:#e69189; background:rgba(198,93,85,.09); }
+
+.sync-key-label { display:flex; align-items:center; gap:6px; }
+.api-link { color:#9be8dc; font-size:11px; cursor:pointer; transition:color 120ms ease; }
+.api-link:hover { color:#b9f2e8; }
 </style>

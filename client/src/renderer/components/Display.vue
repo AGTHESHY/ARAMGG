@@ -325,11 +325,6 @@
                                 {{ t('display.changelog') }}
                             </button>
                         </p>
-                        <p class="footer-meta">
-                            <a class="footer-link footer-api-link" :href="DATA_API_URL" @click.prevent="openDataApi">
-                                （开放API）
-                            </a>
-                        </p>
                     </footer>
                 </div>
             </div>
@@ -482,7 +477,6 @@ const supportedLocales = ref([
     { code: 'zh-TW', label: 'Traditional Chinese', nativeLabel: '繁體中文' },
 ])
 const localeLoading = ref(false)
-const DATA_API_URL = 'https://data.dtodo.cn'
 const GITHUB_URL = 'https://github.com/AGTHESHY/ARAMGG'
 let removeQuitConfirmListener = null
 let removeLocaleChangedListener = null
@@ -833,14 +827,6 @@ const openDownloadUrl = async () => {
         await electronAPI.shell.openExternal(url)
     } catch (error) {
         console.warn('Failed to open update download url:', error)
-    }
-}
-
-const openDataApi = async () => {
-    try {
-        await electronAPI.shell.openExternal(DATA_API_URL)
-    } catch (error) {
-        console.warn('Failed to open data API:', error)
     }
 }
 
@@ -2235,20 +2221,6 @@ onMounted(async () => {
 
 .hex-footer .footer-meta {
     margin-top: 6px;
-}
-
-.footer-api-link {
-    color: #9be8dc !important;
-    font-weight: 900;
-    text-decoration: underline;
-    text-decoration-color: rgba(155, 232, 220, 0.4);
-    text-underline-offset: 2px;
-    transition: color 120ms ease, text-decoration-color 120ms ease;
-}
-
-.footer-api-link:hover {
-    color: #b9f2e8 !important;
-    text-decoration-color: rgba(155, 232, 220, 0.8);
 }
 
 .footer-separator {
