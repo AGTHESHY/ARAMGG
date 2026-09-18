@@ -573,6 +573,22 @@ async function getPaddleOcrService() {
                 import('paddleocr'),
                 import('onnxruntime-node'),
             ])
+
+            // GPU 加速：通过 DirectML 执行提供器加速 ONNX 推理
+            // onnxruntime-node 1.26 在 Windows 上自带 DirectML.dll，支持 NVIDIA/AMD/Intel GPU
+            const gpuDisabled = process.env.ARAMGG_OCR_GPU === '0'
+            if (!gpuDisabled) {
+                const originalCreate = ort.InferenceSession.create
+                ort.InferenceSession.create = async function (model, options) {
+                    const patchedOptions = {
+                        ...(options || {}),
+                        executionProviders: ['dml', 'cpu'],
+                    }
+                    return originalCreate.call(this, model, patchedOptions)
+                }
+                logger.info('[PaddleOCR] GPU acceleration enabled (DirectML)')
+            }
+
             const charactersDictionary = readPaddleOcrCharacterDictionary(
                 readFileSync(modelPaths.recConfigPath, 'utf8')
             )
@@ -600,6 +616,7 @@ async function getPaddleOcrService() {
                     runtimeDir: modelPaths.runtimeDir,
                     dictionarySize: charactersDictionary.length,
                     maxSideLength: PADDLE_OCR_MAX_SIDE_LENGTH,
+                    gpuAcceleration: process.env.ARAMGG_OCR_GPU !== '0' ? 'DirectML' : 'disabled',
                 })
             }
 
