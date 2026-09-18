@@ -13,39 +13,32 @@ let pluginSettings = {
   showTeammateParticleEffects: true,
 }
 
-let settingsWatcher = null
+let settingsPollTimer = null
+let settingsFetchInProgress = false
 
-function loadSettings() {
+async function loadSettings() {
+  if (settingsFetchInProgress) return
+  settingsFetchInProgress = true
   try {
-    const fs = require('fs')
-    const path = require('path')
-    const settingsPath = path.join(__dirname, 'settings.json')
-    if (fs.existsSync(settingsPath)) {
-      const content = fs.readFileSync(settingsPath, 'utf-8')
-      const parsed = JSON.parse(content)
-      pluginSettings = { ...pluginSettings, ...parsed }
+    const resp = await fetch('//plugins/aramgg-stats/settings.json', { cache: 'no-store' })
+    if (!resp.ok) return
+    const parsed = await resp.json()
+    const prev = { ...pluginSettings }
+    pluginSettings = { ...pluginSettings, ...parsed }
+    if (JSON.stringify(prev) !== JSON.stringify(pluginSettings)) {
+      log('Settings updated:', pluginSettings)
+      applySettingsDiff(prev)
     }
   } catch (e) {
-    error('Failed to load settings:', e)
+    // settings.json 不存在或无法访问时使用默认值
+  } finally {
+    settingsFetchInProgress = false
   }
 }
 
 function watchSettings() {
-  try {
-    const fs = require('fs')
-    const path = require('path')
-    const settingsPath = path.join(__dirname, 'settings.json')
-    if (settingsWatcher) settingsWatcher.close()
-    settingsWatcher = fs.watch(settingsPath, { persistent: false }, (eventType) => {
-      if (eventType !== 'change') return
-      const prev = { ...pluginSettings }
-      loadSettings()
-      log('Settings reloaded:', pluginSettings)
-      applySettingsDiff(prev)
-    })
-  } catch (e) {
-    warn('Settings watch failed:', e)
-  }
+  if (settingsPollTimer) clearInterval(settingsPollTimer)
+  settingsPollTimer = setInterval(() => loadSettings(), 3000)
 }
 
 function applySettingsDiff(prev) {
@@ -640,9 +633,9 @@ export function init(context) {
   log('Plugin initializing...')
 }
 
-export function load() {
+export async function load() {
   log('Plugin loading...')
-  loadSettings()
+  await loadSettings()
   watchSettings()
   startObserver()
   if (pluginSettings.showLobbyStats) {
@@ -651,5 +644,5 @@ export function load() {
   if (pluginSettings.showTeammateWinrate) {
     updateChampSelectStats(true, penguContext)
   }
-  log('Plugin loaded successfully')
+  log('Plugin loaded, settings:', pluginSettings)
 }

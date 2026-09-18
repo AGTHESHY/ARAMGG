@@ -156,6 +156,7 @@ export async function writePenguPluginSettings(settings: Record<string, unknown>
       return { success: false, error: '未找到 Pengu Loader' }
     }
     const pluginDir = path.join(penguPath, 'plugins', PLUGIN_DIR_NAME)
+    fs.mkdirSync(pluginDir, { recursive: true })
     const settingsFile = path.join(pluginDir, 'settings.json')
     fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2), 'utf-8')
     logger.info('[PenguPlugin] Settings written:', settingsFile)
