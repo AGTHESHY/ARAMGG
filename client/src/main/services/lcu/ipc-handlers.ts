@@ -370,6 +370,9 @@ export function registerLCUIpcHandlers(): void {
       return { success: false, error }
     }
     const champions = await service.getChampionList()
+    if (champions.length === 0) {
+      return { success: false, error: '获取英雄列表失败，请确保游戏客户端已启动并已登录' }
+    }
     return { success: true, champions }
   })
 

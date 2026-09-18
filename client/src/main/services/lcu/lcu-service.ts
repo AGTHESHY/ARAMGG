@@ -1563,7 +1563,7 @@ export class LCUService {
   async getOwnedSkins(): Promise<number[]> {
     if (!await this.ensureReady()) return []
     try {
-      const res = await axios.get(this.urls!.ownedSkins, {
+      let res = await axios.get(this.urls!.ownedSkins, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         validateStatus: (status) => status < 500,
@@ -1572,7 +1572,13 @@ export class LCUService {
       if (res.status === 401) {
         this.invalidateAuth('owned-skins:unauthorized', null, false)
         await this.getAuthToken(true)
-        return []
+        if (!this.active || !this.auth || !this.urls) return []
+        res = await axios.get(this.urls!.ownedSkins, {
+          ...this.auth,
+          httpsAgent: this.httpsAgent,
+          validateStatus: (status) => status < 500,
+          timeout: 5000,
+        })
       }
       if (!Array.isArray(res.data)) return []
       return res.data
@@ -1592,7 +1598,7 @@ export class LCUService {
   async getChampionList(): Promise<ChampionBrief[]> {
     if (!await this.ensureReady()) return []
     try {
-      const res = await axios.get(this.urls!.championList, {
+      let res = await axios.get(this.urls!.championList, {
         ...this.auth,
         httpsAgent: this.httpsAgent,
         validateStatus: (status) => status < 500,
@@ -1601,7 +1607,13 @@ export class LCUService {
       if (res.status === 401) {
         this.invalidateAuth('champion-list:unauthorized', null, false)
         await this.getAuthToken(true)
-        return []
+        if (!this.active || !this.auth || !this.urls) return []
+        res = await axios.get(this.urls!.championList, {
+          ...this.auth,
+          httpsAgent: this.httpsAgent,
+          validateStatus: (status) => status < 500,
+          timeout: 5000,
+        })
       }
       if (!Array.isArray(res.data)) return []
       return res.data
