@@ -353,6 +353,11 @@ export interface ElectronEventMap {
   'app-update-status-changed': [payload: AppUpdateState]
   'locale-changed': [payload: LocaleChangedPayload]
   'match-history-updated': [payload: MatchHistoryUpdatedPayload]
+  'teammate-winrate-updated': [payload: {
+    queueId: number
+    entries: Array<{ cellId: number; name: string; championId: number; wins: number; games: number; winRate: number | null }>
+    updatedAt: number
+  }]
 }
 
 export type ElectronEventChannel = keyof ElectronEventMap

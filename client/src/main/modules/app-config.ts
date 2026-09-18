@@ -24,6 +24,7 @@ import {
     startLocalMatchHistoryBackgroundSync,
     stopLocalMatchHistoryBackgroundSync,
 } from '../services/match-history/background-sync.ts'
+import { queryTeammateWinrates } from '../services/match-history/teammate-winrate-service.ts'
 import { checkForClientUpdate } from '../version-checker.ts'
 import {
     checkForAppUpdate,
@@ -129,6 +130,7 @@ let lastInProgressInsightChampionId = null
 let lastInProgressChampionRecoveryAttemptAt = 0
 let inProgressChampionRecoveryInFlight = false
 let champSelectSnapshotPollInFlight = false
+let lastTeammateWinrateSignature = ''
 let itemSetPreloadGeneration = 0
 let itemSetPreloadActiveCount = 0
 let itemSetPreloadQueue = []
@@ -799,6 +801,7 @@ async function pollChampSelectSnapshot(lcuService, reason, forceShow = false) {
         const shouldShowEmpty = forceShow && !championId && lastChampSelectInsightChampionId == null
 
         preloadAramItemSetDataForChampSelect(snapshot, reason)
+        void showTeammateWinrates(lcuService, snapshot)
 
         if (championChanged || shouldShowEmpty) {
             lastChampSelectInsightChampionId = championId
@@ -821,6 +824,29 @@ async function pollChampSelectSnapshot(lcuService, reason, forceShow = false) {
         })
     } finally {
         champSelectSnapshotPollInFlight = false
+    }
+}
+
+async function showTeammateWinrates(lcuService, snapshot) {
+    const queueId = Number(snapshot?.champSelectSession?.queueId) || 0
+    const signature = `${queueId}:${(snapshot?.myTeam || []).map(member => member.puuid || member.summonerId || member.cellId).join(',')}`
+    if (!signature || signature === lastTeammateWinrateSignature) return
+    lastTeammateWinrateSignature = signature
+    try {
+        const payload = await queryTeammateWinrates(lcuService, snapshot)
+        if (getChampionMonitorState().phase !== 'ChampSelect' || signature !== lastTeammateWinrateSignature) return
+        const window = await ensureFloatingWindow()
+        if (window.isDestroyed()) return
+        applyFloatingWindowLayout()
+        window.webContents.send('teammate-winrate-updated', payload)
+        raiseOverlayWindow(window, 'teammate-winrate')
+        logger.info('[teammate-winrate] overlay updated', {
+            queueId: payload.queueId,
+            teammateCount: payload.entries.length,
+            availableCount: payload.entries.filter(entry => entry.winRate != null).length,
+        })
+    } catch (error) {
+        logger.debug('[teammate-winrate] query failed:', error instanceof Error ? error.message : String(error))
     }
 }
 
@@ -1206,6 +1232,7 @@ async function initGameFlowMonitor() {
                 applyPopupWindowPreferences(phase)
                 const prevPhase = transition.previous.phase
                 const currentPhase = transition.current.phase
+                if (currentPhase !== 'ChampSelect') lastTeammateWinrateSignature = ''
                 logger.info(`游戏阶段变化(${source}): ${prevPhase || 'unknown'} → ${phase}`)
                 notifyAllWindows('game-phase-changed', { phase: currentPhase, prevPhase })
                 clearAugmentOverlayForPhase(currentPhase)
