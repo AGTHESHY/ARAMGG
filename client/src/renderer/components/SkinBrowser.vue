@@ -100,6 +100,7 @@
           :class="{
             owned: ownedSkins.has(skin.skinId),
             'not-owned': !ownedSkins.has(skin.skinId),
+            'last-used': isLastUsedSkin(skin),
           }"
         >
           <div class="skin-image-wrapper">
@@ -111,18 +112,38 @@
               @error="onImgError"
             />
             <span v-if="ownedSkins.has(skin.skinId)" class="owned-badge">已拥有</span>
-            <span v-if="skin.rarity" class="rarity-badge">{{ getRarityLabel(skin.rarity) }}</span>
+            <span v-if="isUltimateSkin(skin)" class="ultimate-badge">
+              <Crown class="ultimate-icon" />
+              终极皮肤
+            </span>
+            <span v-else-if="skin.rarity" class="rarity-badge">{{ getRarityLabel(skin.rarity) }}</span>
+            <span v-if="isLastUsedSkin(skin)" class="last-used-badge">
+              <Sparkles class="last-used-icon" />
+              上次使用
+            </span>
           </div>
           <div class="skin-info">
             <strong class="skin-name">{{ skin.skinName || '默认皮肤' }}</strong>
-            <div v-if="skin.chromas && skin.chromas.length > 0" class="chroma-list">
+
+            <div v-if="getFormVariations(skin).length > 0" class="form-variations">
               <span
+                v-for="(formName, idx) in getFormVariations(skin)"
+                :key="idx"
+                class="form-chip"
+              >{{ formName }}</span>
+            </div>
+
+            <div v-if="skin.chromas && skin.chromas.length > 0" class="chroma-list">
+              <button
                 v-for="chroma in skin.chromas"
                 :key="chroma.id"
                 class="chroma-dot"
+                :class="{ selected: isChromaSelected(skin.skinId, chroma.id) }"
                 :style="getChromaStyle(chroma)"
                 :title="chroma.name"
-              ></span>
+                :disabled="selectingChromaId === chroma.id"
+                @click="selectChroma(skin, chroma)"
+              ></button>
               <small v-if="skin.chromas.length > 1" class="chroma-count">{{ skin.chromas.length }} 炫彩</small>
             </div>
             <button
@@ -152,8 +173,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import type { SkinRuntimeState } from '../../shared/ipc-contract.ts'
-import { RefreshCw, ChevronLeft } from 'lucide-vue-next'
+import type { SkinRuntimeState, SkinMemoryEntry, ChampionMonitorState } from '../../shared/ipc-contract.ts'
+import { RefreshCw, ChevronLeft, Crown, Sparkles } from 'lucide-vue-next'
 import { electronAPI } from '../native/electron-api.ts'
 import { getChampionSquareIconUrl } from '../service/cdn'
 
@@ -198,7 +219,11 @@ const error = ref('')
 const selectingSkinId = ref<number | null>(null)
 const selectStatus = ref('')
 const runtimeState = ref<SkinRuntimeState | null>(null)
+const skinMemory = ref<Record<number, SkinMemoryEntry>>({})
+const selectedChroma = ref<{ skinId: number; chromaId: number } | null>(null)
+const selectingChromaId = ref<number | null>(null)
 let unsubscribeRuntime: (() => void) | null = null
+let unsubscribeChampionMonitor: (() => void) | null = null
 
 const filteredChampions = computed(() => {
   if (!searchQuery.value.trim()) return champions.value
@@ -206,6 +231,11 @@ const filteredChampions = computed(() => {
   return champions.value.filter(
     (c) => c.name.toLowerCase().includes(q) || c.alias.toLowerCase().includes(q)
   )
+})
+
+const lastUsedSkin = computed<SkinMemoryEntry | null>(() => {
+  if (!selectedChampion.value) return null
+  return skinMemory.value[selectedChampion.value.id] || null
 })
 
 const getChampionIcon = (id: number) => getChampionSquareIconUrl(id)
@@ -245,6 +275,49 @@ const getRarityLabel = (rarity: string): string => {
   return rarityMap[rarity] || rarity
 }
 
+const isUltimateSkin = (skin: SkinData): boolean => {
+  return skin.rarity === 'ULTIMATE' || skin.rarity === 'TIER_ULTIMATE'
+}
+
+const isLastUsedSkin = (skin: SkinData): boolean => {
+  return lastUsedSkin.value?.skinId === skin.skinId
+}
+
+const isChromaSelected = (skinId: number, chromaId: number): boolean => {
+  return selectedChroma.value?.skinId === skinId && selectedChroma.value?.chromaId === chromaId
+}
+
+const getFormVariations = (skin: SkinData): string[] => {
+  const forms: string[] = []
+  const formChanges = skin.formChanges
+  if (Array.isArray(formChanges)) {
+    for (const form of formChanges) {
+      if (form && typeof form === 'object') {
+        const record = form as Record<string, unknown>
+        const name = record.formName || record.name || record.label || record.formChangeName
+        if (name) forms.push(String(name))
+      } else if (typeof form === 'string') {
+        forms.push(form)
+      }
+    }
+  }
+  if (forms.length === 0) {
+    const tiers = skin.tiers
+    if (Array.isArray(tiers)) {
+      for (const tier of tiers) {
+        if (tier && typeof tier === 'object') {
+          const record = tier as Record<string, unknown>
+          const name = record.tierName || record.name || record.label
+          if (name) forms.push(String(name))
+        } else if (typeof tier === 'string') {
+          forms.push(tier)
+        }
+      }
+    }
+  }
+  return forms
+}
+
 const onImgError = (e: Event) => {
   const img = e.target as HTMLImageElement
   img.style.opacity = '0.25'
@@ -279,16 +352,36 @@ const loadData = async () => {
   }
 }
 
+const saveSkinMemory = (skin: SkinData, chromaId?: number) => {
+  if (!selectedChampion.value) return
+  const entry: SkinMemoryEntry = {
+    championId: selectedChampion.value.id,
+    skinId: skin.skinId,
+    chromaId,
+    skinName: skin.skinName || '默认皮肤',
+    championAlias: selectedChampion.value.alias,
+    timestamp: Date.now(),
+  }
+  const updated = { ...skinMemory.value, [selectedChampion.value.id]: entry }
+  skinMemory.value = updated
+  void electronAPI.store.set('skinMemory', updated)
+}
+
 const selectChampion = async (champ: ChampionBrief) => {
   selectedChampion.value = champ
   loadingSkins.value = true
   skins.value = []
   selectStatus.value = ''
+  selectedChroma.value = null
 
   try {
     const result = await electronAPI.lcu.getChampionSkins(champ.id)
     if (result.success && result.data?.skins) {
       skins.value = result.data.skins as unknown as SkinData[]
+      const memory = skinMemory.value[champ.id]
+      if (memory?.chromaId) {
+        selectedChroma.value = { skinId: memory.skinId, chromaId: memory.chromaId }
+      }
     }
   } catch {
     // silent
@@ -301,6 +394,7 @@ const backToChampions = () => {
   selectedChampion.value = null
   skins.value = []
   selectStatus.value = ''
+  selectedChroma.value = null
 }
 
 const selectSkin = async (skinId: number) => {
@@ -311,6 +405,8 @@ const selectSkin = async (skinId: number) => {
     const result = await electronAPI.lcu.setMySelectionSkin(skinId)
     if (result.success) {
       selectStatus.value = '皮肤已设置，请在选人阶段使用'
+      const skin = skins.value.find((s) => s.skinId === skinId)
+      if (skin) saveSkinMemory(skin)
     } else {
       selectStatus.value = result.error || '设置皮肤失败，请确认处于选人阶段'
     }
@@ -318,6 +414,27 @@ const selectSkin = async (skinId: number) => {
     selectStatus.value = '设置皮肤失败，请确认处于选人阶段'
   } finally {
     selectingSkinId.value = null
+  }
+}
+
+const selectChroma = async (skin: SkinData, chroma: ChromaData) => {
+  if (selectingChromaId.value !== null) return
+  selectingChromaId.value = chroma.id
+  selectStatus.value = ''
+
+  try {
+    const result = await electronAPI.lcu.setMySelectionChroma(skin.skinId, chroma.id)
+    if (result.success) {
+      selectedChroma.value = { skinId: skin.skinId, chromaId: chroma.id }
+      selectStatus.value = `炫彩已设置：${chroma.name || ''}`
+      saveSkinMemory(skin, chroma.id)
+    } else {
+      selectStatus.value = result.error || '设置炫彩失败，请确认处于选人阶段'
+    }
+  } catch {
+    selectStatus.value = '设置炫彩失败，请确认处于选人阶段'
+  } finally {
+    selectingChromaId.value = null
   }
 }
 
@@ -331,6 +448,7 @@ const selectLocalSkin = async (skin: SkinData) => {
     skinName: skin.skinName || '默认皮肤',
   })
   selectingSkinId.value = null
+  saveSkinMemory(skin)
 }
 
 const importRuntimeDll = async () => {
@@ -343,12 +461,49 @@ const clearLocalSkin = async () => {
   runtimeState.value = await electronAPI.skinRuntime.clear()
 }
 
+const autoSwitchToCurrentChampion = async () => {
+  try {
+    const result = await electronAPI.lcu.getChampionId()
+    if (result.success && result.championId) {
+      const champ = champions.value.find((c) => c.id === result.championId)
+      if (champ) {
+        await selectChampion(champ)
+      }
+    }
+  } catch {
+    // silent
+  }
+}
+
+const onChampionChanged = (state: ChampionMonitorState) => {
+  if (!state.selectedChampionId) return
+  if (selectedChampion.value?.id === state.selectedChampionId) return
+  const champ = champions.value.find((c) => c.id === state.selectedChampionId)
+  if (champ) {
+    void selectChampion(champ)
+  }
+}
+
 onMounted(async () => {
   await loadData()
+
+  const memory = await electronAPI.store.get('skinMemory')
+  if (memory && typeof memory === 'object') {
+    skinMemory.value = memory as Record<number, SkinMemoryEntry>
+  }
+
+  await autoSwitchToCurrentChampion()
+
   runtimeState.value = await electronAPI.skinRuntime.getState()
-  unsubscribeRuntime = electronAPI.events.on('skin-runtime-changed', value => { runtimeState.value = value })
+  unsubscribeRuntime = electronAPI.events.on('skin-runtime-changed', (value) => {
+    runtimeState.value = value
+  })
+  unsubscribeChampionMonitor = electronAPI.events.on('champion-monitor-changed', onChampionChanged)
 })
-onUnmounted(() => unsubscribeRuntime?.())
+onUnmounted(() => {
+  unsubscribeRuntime?.()
+  unsubscribeChampionMonitor?.()
+})
 </script>
 
 <style scoped>
@@ -594,6 +749,11 @@ onUnmounted(() => unsubscribeRuntime?.())
   opacity: 0.72;
 }
 
+.skin-card.last-used {
+  border-color: rgba(148, 201, 235, 0.35);
+  box-shadow: 0 0 8px rgba(148, 201, 235, 0.1);
+}
+
 .skin-image-wrapper {
   position: relative;
   aspect-ratio: 16 / 9;
@@ -636,6 +796,48 @@ onUnmounted(() => unsubscribeRuntime?.())
   border-radius: 2px;
 }
 
+.ultimate-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: bold;
+  color: #e6c58e;
+  background: linear-gradient(135deg, rgba(226, 195, 132, 0.2), rgba(7, 19, 27, 0.9));
+  border: 1px solid rgba(226, 195, 132, 0.55);
+  border-radius: 2px;
+  text-shadow: 0 0 6px rgba(226, 195, 132, 0.4);
+}
+
+.ultimate-icon {
+  width: 11px;
+  height: 11px;
+}
+
+.last-used-badge {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  font-size: 10px;
+  color: #94c9eb;
+  background: rgba(7, 19, 27, 0.85);
+  border: 1px solid rgba(148, 201, 235, 0.4);
+  border-radius: 2px;
+}
+
+.last-used-icon {
+  width: 11px;
+  height: 11px;
+}
+
 .skin-info {
   padding: 8px 10px;
   display: flex;
@@ -651,6 +853,21 @@ onUnmounted(() => unsubscribeRuntime?.())
   text-overflow: ellipsis;
 }
 
+.form-variations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.form-chip {
+  padding: 2px 6px;
+  font-size: 10px;
+  color: #caa86d;
+  background: rgba(226, 195, 132, 0.08);
+  border: 1px solid rgba(226, 195, 132, 0.15);
+  border-radius: 2px;
+}
+
 .chroma-list {
   display: flex;
   align-items: center;
@@ -661,10 +878,31 @@ onUnmounted(() => unsubscribeRuntime?.())
 .chroma-dot {
   width: 12px;
   height: 12px;
-  border-radius: 50%;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  cursor: default;
+  border-radius: 50%;
+  cursor: pointer;
   display: inline-block;
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.chroma-dot:hover:not(:disabled) {
+  transform: scale(1.25);
+  border-color: rgba(226, 195, 132, 0.6);
+}
+
+.chroma-dot.selected {
+  border-color: #e6c58e;
+  box-shadow: 0 0 0 2px rgba(226, 195, 132, 0.55);
+  transform: scale(1.15);
+}
+
+.chroma-dot:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .chroma-count {

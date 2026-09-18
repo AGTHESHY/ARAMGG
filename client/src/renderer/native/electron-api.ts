@@ -89,6 +89,9 @@ export const electronAPI: ElectronAPI = {
     prepare: (...args) => requireElectronAPI().skinRuntime.prepare(...args),
     clear: (...args) => requireElectronAPI().skinRuntime.clear(...args),
     importDll: (...args) => requireElectronAPI().skinRuntime.importDll(...args),
+    scanLocalMods: (...args) => requireElectronAPI().skinRuntime.scanLocalMods(...args),
+    toggleMod: (...args) => requireElectronAPI().skinRuntime.toggleMod(...args),
+    deleteMod: (...args) => requireElectronAPI().skinRuntime.deleteMod(...args),
   },
   lcu: {
     getChampionMonitorState: () => requireElectronAPI().lcu.getChampionMonitorState(),
@@ -113,6 +116,7 @@ export const electronAPI: ElectronAPI = {
     getChampionList: (...args) => requireElectronAPI().lcu.getChampionList(...args),
     getChampionSkins: (...args) => requireElectronAPI().lcu.getChampionSkins(...args),
     setMySelectionSkin: (...args) => requireElectronAPI().lcu.setMySelectionSkin(...args),
+    setMySelectionChroma: (...args) => requireElectronAPI().lcu.setMySelectionChroma(...args),
     getDecorations: (...args) => requireElectronAPI().lcu.getDecorations(...args),
     getPartySkins: (...args) => requireElectronAPI().lcu.getPartySkins(...args),
     setSummonerEmote: (...args) => requireElectronAPI().lcu.setSummonerEmote(...args),

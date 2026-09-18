@@ -398,6 +398,15 @@ export function registerLCUIpcHandlers(): void {
     return { success: ok, skinId, error: ok ? null : '设置皮肤失败，可能不在选人阶段' }
   })
 
+  ipcMain.handle('lcu-set-my-selection-chroma', async (_event, skinId: number, chromaId: number) => {
+    const { service, error } = await getLcuServiceFromStore()
+    if (!service) {
+      return { success: false, error }
+    }
+    const ok = await service.setMySelectionChroma(skinId, chromaId)
+    return { success: ok, skinId, chromaId, error: ok ? null : '设置炫彩失败，可能不在选人阶段' }
+  })
+
   ipcMain.handle('lcu-get-decorations', async () => {
     const { service, error } = await getLcuServiceFromStore()
     if (!service) {

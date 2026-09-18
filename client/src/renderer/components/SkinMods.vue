@@ -49,20 +49,51 @@
         <span>正在扫描模组目录...</span>
       </div>
 
+      <div v-else-if="scanError" class="mods-error">
+        <AlertTriangle class="error-icon" />
+        <span>{{ scanError }}</span>
+      </div>
+
       <div v-else-if="mods.length === 0" class="mods-empty">
         <CircleDashed class="empty-icon" />
         <span>{{ modDir ? '目录中未找到皮肤模组 ZIP 文件' : '请先设置模组目录' }}</span>
       </div>
 
       <div v-else class="mods-list">
-        <div v-for="mod in mods" :key="mod.filename" class="mod-item">
+        <div
+          v-for="mod in mods"
+          :key="mod.filename"
+          class="mod-item"
+          :class="{ 'is-disabled': !mod.enabled || mod.status === 'disabled' }"
+        >
           <div class="mod-info">
             <strong class="mod-name">{{ mod.filename }}</strong>
             <small class="mod-size">{{ formatSize(mod.size) }}</small>
           </div>
-          <span class="mod-status" :class="mod.status">
-            {{ statusLabel(mod.status) }}
-          </span>
+          <div class="mod-actions">
+            <span class="mod-status" :class="mod.status">
+              {{ statusLabel(mod.status) }}
+            </span>
+            <button
+              class="toggle-btn"
+              type="button"
+              :title="mod.enabled ? '禁用模组' : '启用模组'"
+              :disabled="toggling === mod.filename || mod.status === 'corrupt'"
+              @click="toggleMod(mod)"
+            >
+              <ToggleRight v-if="mod.enabled" class="toggle-icon on" />
+              <ToggleLeft v-else class="toggle-icon off" />
+            </button>
+            <button
+              class="delete-btn"
+              type="button"
+              title="删除模组"
+              :disabled="deleting === mod.filename"
+              @click="deleteMod(mod)"
+            >
+              <Trash2 class="delete-icon" />
+            </button>
+          </div>
         </div>
       </div>
     </section>
@@ -84,13 +115,26 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Package, FolderSearch, Save, RefreshCw, CircleDashed, AlertTriangle } from 'lucide-vue-next'
+import {
+  Package,
+  FolderSearch,
+  Save,
+  RefreshCw,
+  CircleDashed,
+  AlertTriangle,
+  Trash2,
+  ToggleLeft,
+  ToggleRight,
+} from 'lucide-vue-next'
 import { electronAPI } from '../native/electron-api.ts'
 
 interface ModItem {
   filename: string
   size: number
-  status: 'ready' | 'unknown'
+  championId: number | null
+  skinId: number | null
+  enabled: boolean
+  status: 'ready' | 'disabled' | 'corrupt' | 'unknown'
 }
 
 const modDir = ref('')
@@ -98,7 +142,10 @@ const savedDir = ref('')
 const saving = ref(false)
 const saveStatus = ref('')
 const scanning = ref(false)
+const scanError = ref('')
 const mods = ref<ModItem[]>([])
+const toggling = ref<string | null>(null)
+const deleting = ref<string | null>(null)
 
 const formatSize = (bytes: number): string => {
   if (bytes < 1024) return bytes + ' B'
@@ -108,6 +155,8 @@ const formatSize = (bytes: number): string => {
 
 const statusLabel = (status: string): string => {
   if (status === 'ready') return '可用'
+  if (status === 'disabled') return '已禁用'
+  if (status === 'corrupt') return '损坏'
   return '未知'
 }
 
@@ -146,12 +195,62 @@ const saveDir = async () => {
 
 const scanMods = async () => {
   scanning.value = true
+  scanError.value = ''
   mods.value = []
-  // In a full implementation, this would scan the directory for ZIP files
-  // For now, we show the UI framework ready for CSLOL integration
-  setTimeout(() => {
+  try {
+    const result = await electronAPI.skinRuntime.scanLocalMods()
+    if (result.success && result.mods) {
+      mods.value = result.mods.map((m) => ({
+        filename: m.filename,
+        size: m.size,
+        championId: m.championId,
+        skinId: m.skinId,
+        enabled: m.enabled,
+        status: m.status,
+      }))
+    } else {
+      scanError.value = result.error || '扫描模组失败'
+    }
+  } catch (err) {
+    scanError.value = err instanceof Error ? err.message : '扫描模组失败'
+  } finally {
     scanning.value = false
-  }, 500)
+  }
+}
+
+const toggleMod = async (mod: ModItem) => {
+  if (toggling.value || deleting.value) return
+  toggling.value = mod.filename
+  scanError.value = ''
+  try {
+    const result = await electronAPI.skinRuntime.toggleMod(mod.filename, !mod.enabled)
+    if (!result.success) {
+      scanError.value = result.error || '切换模组状态失败'
+    }
+  } catch (err) {
+    scanError.value = err instanceof Error ? err.message : '切换模组状态失败'
+  } finally {
+    toggling.value = null
+  }
+  await scanMods()
+}
+
+const deleteMod = async (mod: ModItem) => {
+  if (toggling.value || deleting.value) return
+  if (!window.confirm(`确定要删除模组 ${mod.filename} 吗？此操作不可撤销。`)) return
+  deleting.value = mod.filename
+  scanError.value = ''
+  try {
+    const result = await electronAPI.skinRuntime.deleteMod(mod.filename)
+    if (!result.success) {
+      scanError.value = result.error || '删除模组失败'
+    }
+  } catch (err) {
+    scanError.value = err instanceof Error ? err.message : '删除模组失败'
+  } finally {
+    deleting.value = null
+  }
+  await scanMods()
 }
 
 onMounted(loadDir)
@@ -320,7 +419,8 @@ onMounted(loadDir)
 }
 
 .mods-loading,
-.mods-empty {
+.mods-empty,
+.mods-error {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -330,8 +430,13 @@ onMounted(loadDir)
   font-size: 12px;
 }
 
+.mods-error {
+  color: #e57373;
+}
+
 .loading-icon,
-.empty-icon {
+.empty-icon,
+.error-icon {
   width: 15px;
   height: 15px;
 }
@@ -351,6 +456,11 @@ onMounted(loadDir)
   border: 1px solid rgba(226, 195, 132, 0.06);
   background: rgba(7, 19, 27, 0.3);
   border-radius: 2px;
+  transition: opacity 150ms ease;
+}
+
+.mod-item.is-disabled {
+  opacity: 0.5;
 }
 
 .mod-info {
@@ -373,6 +483,13 @@ onMounted(loadDir)
   color: #55606a;
 }
 
+.mod-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .mod-status {
   font-size: 10px;
   padding: 2px 6px;
@@ -385,9 +502,76 @@ onMounted(loadDir)
   background: rgba(111, 206, 143, 0.08);
 }
 
+.mod-status.disabled {
+  color: #55606a;
+  background: rgba(85, 96, 106, 0.08);
+}
+
+.mod-status.corrupt {
+  color: #e57373;
+  background: rgba(229, 115, 115, 0.08);
+}
+
 .mod-status.unknown {
   color: #71818d;
   background: rgba(113, 129, 141, 0.08);
+}
+
+.toggle-btn {
+  display: flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 2px;
+  transition: opacity 150ms ease;
+}
+
+.toggle-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.toggle-icon.on {
+  color: #6fce8f;
+}
+
+.toggle-icon.off {
+  color: #4a5a67;
+}
+
+.toggle-btn:hover:not(:disabled) {
+  opacity: 0.8;
+}
+
+.toggle-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.delete-btn {
+  display: flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 2px;
+  color: #55606a;
+  transition: color 150ms ease, opacity 150ms ease;
+}
+
+.delete-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.delete-btn:hover:not(:disabled) {
+  color: #e57373;
+}
+
+.delete-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .mods-notice {

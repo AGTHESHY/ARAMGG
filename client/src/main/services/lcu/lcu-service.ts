@@ -1780,6 +1780,29 @@ export class LCUService {
     } catch { return false }
   }
 
+  async setMySelectionChroma(skinId: number, chromaId: number): Promise<boolean> {
+    if (!await this.ensureReady()) return false
+    try {
+      const res = await axios.patch(
+        this.urls!.mySelection,
+        { selectedSkinId: skinId, selectedChromaId: chromaId },
+        { ...this.auth, httpsAgent: this.httpsAgent, validateStatus: (status) => status < 500, timeout: 5000 }
+      )
+      if (res.status >= 200 && res.status < 300) return true
+      if (res.status === 401) {
+        this.invalidateAuth('my-selection-chroma:unauthorized', null, false)
+        await this.getAuthToken(true)
+      }
+      logger.warn('[LCU] set my selection chroma failed:', { skinId, chromaId, status: res.status })
+      return false
+    } catch (error) {
+      if (!await this.recoverFromConnectionFailure('my-selection-chroma', error)) {
+        logger.warn('[LCU] set my selection chroma error:', { skinId, chromaId, code: getLcuRequestErrorCode(error) })
+      }
+      return false
+    }
+  }
+
   private async ensureReady(): Promise<boolean> {
     if (!this.active || !this.url) {
       await this.getAuthToken()

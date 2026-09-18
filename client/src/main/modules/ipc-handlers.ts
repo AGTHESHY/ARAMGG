@@ -51,6 +51,9 @@ import {
     installSkinRuntimeDll,
     prepareSkin,
     refreshSkinRuntimeState,
+    scanLocalMods,
+    toggleLocalMod,
+    deleteLocalMod,
 } from '../services/skin-runtime/skin-runtime-service.ts'
 import { shouldRaiseOverlayWindow } from './overlay-window-state.ts'
 import { deleteDeveloperKey, getDeveloperKeyStatus, saveDeveloperKey } from '../services/developer-key-service.ts'
@@ -388,6 +391,30 @@ export function registerIpcHandlers(isDev: boolean): void {
             return { success: true, data: await installSkinRuntimeDll(result.filePaths[0]) }
         } catch (error) {
             return { success: false, error: error instanceof Error ? error.message : String(error) }
+        }
+    })
+    ipcMain.handle('skin-runtime-scan-local-mods', async () => {
+        try {
+            const mods = await scanLocalMods()
+            return { success: true, mods }
+        } catch (error) {
+            return { success: false, mods: [], error: getErrorMessage(error) }
+        }
+    })
+    ipcMain.handle('skin-runtime-toggle-mod', async (_event, filename: string, enabled: boolean) => {
+        try {
+            const ok = await toggleLocalMod(filename, enabled)
+            return { success: ok, error: ok ? null : '模组文件未找到' }
+        } catch (error) {
+            return { success: false, error: getErrorMessage(error) }
+        }
+    })
+    ipcMain.handle('skin-runtime-delete-mod', async (_event, filename: string) => {
+        try {
+            const ok = await deleteLocalMod(filename)
+            return { success: ok, error: ok ? null : '模组文件未找到' }
+        } catch (error) {
+            return { success: false, error: getErrorMessage(error) }
         }
     })
     ipcMain.handle('developer-key-status', () => getDeveloperKeyStatus())

@@ -1,15 +1,20 @@
 import { app, BrowserWindow } from 'electron'
 import { spawn, type ChildProcess } from 'child_process'
 import { createWriteStream } from 'fs'
-import { access, cp, mkdir, readFile, rename, rm, stat } from 'fs/promises'
+import { access, cp, mkdir, readFile, readdir, rename, rm, stat } from 'fs/promises'
 import https from 'https'
 import path from 'path'
 import { createRequire } from 'module'
 import logger from '../../modules/logger.ts'
 import { GameProcessMonitor } from './game-process-monitor.ts'
+import type { LocalModEntry } from '../../../shared/ipc-contract.ts'
 
 const require = createRequire(import.meta.url)
-const AdmZip = require('adm-zip') as new (file: string) => { extractAllTo(destination: string, overwrite: boolean): void }
+const AdmZip = require('adm-zip') as new (file: string) => {
+  extractAllTo(destination: string, overwrite: boolean): void
+  getEntries(): { entryName: string; getData(): Buffer }[]
+  test(): boolean
+}
 
 export type SkinRuntimePhase = 'unsupported' | 'missing-dependency' | 'idle' | 'downloading' | 'prepared' | 'applying' | 'active' | 'error'
 
@@ -18,6 +23,7 @@ export interface SkinRuntimeSelection {
   championName: string
   skinId: number
   skinName: string
+  chromaId?: number
 }
 
 export interface SkinRuntimeState {
@@ -27,6 +33,7 @@ export interface SkinRuntimeState {
   message: string
   selection: SkinRuntimeSelection | null
   dependencyDirectory: string
+  timing?: { phase: string; ms: number }[]
 }
 
 const state: SkinRuntimeState = {
@@ -36,6 +43,15 @@ const state: SkinRuntimeState = {
   message: process.platform === 'win32' ? '本地替换运行器就绪' : '真实本地替换仅支持 Windows 10/11',
   selection: null,
   dependencyDirectory: '',
+}
+
+const timingLog: { phase: string; ms: number }[] = []
+
+function recordTiming(phase: string, startedAt: number): void {
+  const ms = Date.now() - startedAt
+  timingLog.push({ phase, ms })
+  if (timingLog.length > 20) timingLog.shift()
+  logger.info(`[skin-runtime] ${phase} completed in ${ms}ms`)
 }
 
 let activeProcess: ChildProcess | null = null
@@ -74,6 +90,7 @@ function setState(update: Partial<SkinRuntimeState>): void {
 
 export function getSkinRuntimeState(): SkinRuntimeState {
   state.dependencyDirectory = toolsDirectory()
+  state.timing = [...timingLog]
   return { ...state, selection: state.selection ? { ...state.selection } : null }
 }
 
@@ -172,9 +189,11 @@ async function downloadWithResume(url: string, destination: string, generation: 
 
 export async function prepareSkin(selection: SkinRuntimeSelection): Promise<SkinRuntimeState> {
   if (!state.supported) return getSkinRuntimeState()
-  const normalized = {
+  const startedAt = Date.now()
+  const normalized: SkinRuntimeSelection = {
     championId: Number(selection.championId), skinId: Number(selection.skinId),
     championName: String(selection.championName || ''), skinName: String(selection.skinName || ''),
+    chromaId: selection.chromaId ? Number(selection.chromaId) : undefined,
   }
   if (!Number.isInteger(normalized.championId) || !Number.isInteger(normalized.skinId)) throw new Error('无效的英雄或皮肤编号')
   const generation = ++operationGeneration
@@ -189,13 +208,20 @@ export async function prepareSkin(selection: SkinRuntimeSelection): Promise<Skin
     const archive = skinArchivePath(normalized)
     if (!(await exists(archive))) {
       setState({ phase: 'downloading', progress: 0, selection: normalized, message: `正在下载 ${normalized.skinName}…` })
+      const dlStart = Date.now()
       await downloadWithResume(downloadUrl(normalized), archive, generation)
+      recordTiming('download', dlStart)
     }
     if (generation !== operationGeneration) return getSkinRuntimeState()
     setState({ phase: 'prepared', progress: 100, selection: normalized, message: `${normalized.skinName} 已准备，将在游戏开始时应用` })
+    recordTiming('prepare-total', startedAt)
     if (pendingApplyLeagueRoot) void applyPreparedSkin(pendingApplyLeagueRoot)
   } catch (error) {
-    if (generation === operationGeneration) setState({ phase: state.phase === 'missing-dependency' ? 'missing-dependency' : 'error', progress: 0, message: error instanceof Error ? error.message : String(error) })
+    if (generation === operationGeneration) {
+      const errMsg = error instanceof Error ? error.message : String(error)
+      logger.error('[skin-runtime] prepare failed', { error: errMsg, durationMs: Date.now() - startedAt })
+      setState({ phase: state.phase === 'missing-dependency' ? 'missing-dependency' : 'error', progress: 0, message: errMsg })
+    }
   }
   return getSkinRuntimeState()
 }
@@ -220,6 +246,7 @@ function run(command: string, args: string[], timeoutMs: number): Promise<void> 
 
 export async function applyPreparedSkin(leagueRoot: string): Promise<SkinRuntimeState> {
   if (!state.supported || !state.selection) return getSkinRuntimeState()
+  const startedAt = Date.now()
   pendingApplyLeagueRoot = leagueRoot
   if (state.phase === 'downloading') return getSkinRuntimeState()
   if (!['prepared', 'error'].includes(state.phase)) return getSkinRuntimeState()
@@ -237,30 +264,38 @@ export async function applyPreparedSkin(leagueRoot: string): Promise<SkinRuntime
     const modName = `skin-${state.selection.championId}-${state.selection.skinId}`
     const modDirectory = path.join(mods, modName)
     await mkdir(modDirectory, { recursive: true })
+    const extractStart = Date.now()
     new AdmZip(archive).extractAllTo(modDirectory, true)
+    recordTiming('extract', extractStart)
     setState({ phase: 'applying', message: `正在生成 ${state.selection.skinName} 的本地覆盖层…` })
     const tool = path.join(toolsDirectory(), 'mod-tools.exe')
+    const mkStart = Date.now()
     await run(tool, ['mkoverlay', mods, overlay, `--game:${gameDirectory}`, `--mods:${modName}`, '--noTFT', '--ignoreConflict'], 120_000)
+    recordTiming('mkoverlay', mkStart)
     if (generation !== operationGeneration) {
       await processMonitor.stop('skin selection changed during overlay preparation')
       return getSkinRuntimeState()
     }
+    const runStart = Date.now()
     activeProcess = await new Promise<ChildProcess>((resolve, reject) => {
       const child = spawn(tool, ['runoverlay', overlay, path.join(overlay, 'cslol-config.json'), `--game:${gameDirectory}`, '--opts:configless'], { windowsHide: true, detached: false, stdio: 'ignore' })
       child.once('spawn', () => resolve(child))
       child.once('error', reject)
     })
+    recordTiming('runoverlay-spawn', runStart)
     await processMonitor.markOverlayStarted()
     activeProcess.once('exit', code => {
       activeProcess = null
       if (generation === operationGeneration && state.phase === 'active') setState({ phase: code === 0 ? 'prepared' : 'error', message: code === 0 ? '本局本地替换已结束' : `本地覆盖层意外退出（${code}）` })
     })
     setState({ phase: 'active', message: `${state.selection.skinName} 的本地替换正在运行` })
+    recordTiming('apply-total', startedAt)
     pendingApplyLeagueRoot = ''
   } catch (error) {
     await processMonitor.stop('skin apply failed')
-    logger.warn('[skin-runtime] apply failed', error)
-    if (generation === operationGeneration) setState({ phase: 'error', message: error instanceof Error ? error.message : String(error) })
+    const errMsg = error instanceof Error ? error.message : String(error)
+    logger.error('[skin-runtime] apply failed', { error: errMsg, durationMs: Date.now() - startedAt })
+    if (generation === operationGeneration) setState({ phase: 'error', message: errMsg })
   }
   return getSkinRuntimeState()
 }
@@ -291,13 +326,132 @@ export async function stopSkinOverlay(): Promise<SkinRuntimeState> {
   return getSkinRuntimeState()
 }
 
-export async function scanLocalSkins(): Promise<Array<{ championId: number; skinId: number; bytes: number }>> {
-  const root = path.join(runtimeRoot(), 'skins')
-  const result: Array<{ championId: number; skinId: number; bytes: number }> = []
-  const index = path.join(root, '.index.json')
+function skinsRoot(): string {
+  return path.join(runtimeRoot(), 'skins')
+}
+
+function parseModFilename(filename: string): { championId: number | null; skinId: number | null } {
+  const base = filename.replace(/\.(zip|fantome)$/i, '')
+  const match = /^(\d+)_(\d+)$/.exec(base)
+  if (match) {
+    return { championId: Number(match[1]), skinId: Number(match[2]) }
+  }
+  const skinMatch = /^(\d+)$/.exec(base)
+  if (skinMatch) {
+    const skinId = Number(skinMatch[1])
+    const championId = Math.floor(skinId / 1000)
+    return championId > 0 ? { championId, skinId } : { championId: null, skinId }
+  }
+  return { championId: null, skinId: null }
+}
+
+export async function scanLocalMods(): Promise<LocalModEntry[]> {
+  const root = skinsRoot()
+  const result: LocalModEntry[] = []
+  const disabledDir = path.join(root, '.disabled')
+
   try {
-    const cached = JSON.parse(await readFile(index, 'utf8'))
-    if (Array.isArray(cached)) return cached
-  } catch { /* rebuild below */ }
+    await access(root)
+  } catch {
+    return result
+  }
+
+  const scanDir = async (dir: string, disabled: boolean): Promise<void> => {
+    let entries: string[]
+    try {
+      entries = await readdir(dir)
+    } catch {
+      return
+    }
+
+    for (const entry of entries) {
+      if (entry.startsWith('.')) continue
+      const fullPath = path.join(dir, entry)
+      const fileStat = await stat(fullPath).catch(() => null)
+      if (!fileStat || !fileStat.isFile()) continue
+
+      const ext = path.extname(entry).toLowerCase()
+      if (ext !== '.zip' && ext !== '.fantome') continue
+
+      const { championId, skinId } = parseModFilename(entry)
+      let status: LocalModEntry['status'] = disabled ? 'disabled' : 'unknown'
+
+      if (!disabled) {
+        try {
+          const zip = new AdmZip(fullPath)
+          if (zip.test()) {
+            status = 'ready'
+          } else {
+            status = 'corrupt'
+          }
+        } catch {
+          status = 'corrupt'
+        }
+      }
+
+      result.push({
+        filename: entry,
+        size: fileStat.size,
+        championId,
+        skinId,
+        enabled: !disabled,
+        status,
+      })
+    }
+  }
+
+  await scanDir(root, false)
+  await scanDir(disabledDir, true)
+
+  result.sort((a, b) => {
+    if (a.championId && b.championId) return a.championId - b.championId
+    if (a.championId) return -1
+    if (b.championId) return 1
+    return a.filename.localeCompare(b.filename)
+  })
+
   return result
+}
+
+export async function toggleLocalMod(filename: string, enabled: boolean): Promise<boolean> {
+  const root = skinsRoot()
+  const disabledDir = path.join(root, '.disabled')
+  const srcPath = enabled
+    ? path.join(disabledDir, filename)
+    : path.join(root, filename)
+  const destPath = enabled
+    ? path.join(root, filename)
+    : path.join(disabledDir, filename)
+
+  if (!(await exists(srcPath))) return false
+
+  if (enabled) {
+    await mkdir(disabledDir, { recursive: true })
+  }
+
+  if (await exists(destPath)) {
+    await rm(destPath, { force: true })
+  }
+
+  await mkdir(path.dirname(destPath), { recursive: true })
+  await rename(srcPath, destPath)
+  return true
+}
+
+export async function deleteLocalMod(filename: string): Promise<boolean> {
+  const root = skinsRoot()
+  const disabledDir = path.join(root, '.disabled')
+
+  const enabledPath = path.join(root, filename)
+  const disabledPath = path.join(disabledDir, filename)
+
+  if (await exists(enabledPath)) {
+    await rm(enabledPath, { force: true })
+    return true
+  }
+  if (await exists(disabledPath)) {
+    await rm(disabledPath, { force: true })
+    return true
+  }
+  return false
 }

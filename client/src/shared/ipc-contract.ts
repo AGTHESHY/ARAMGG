@@ -16,6 +16,9 @@ export type AppStoreKey =
   | 'lobbyStats.enabled'
   | 'aramBenchSwap.enabled'
   | 'skinMods.directory'
+  | 'skinMemory'
+  | 'skinHistory'
+  | 'skinRandomSettings'
 
 export type SupportedDataLocale = 'zh-CN' | 'zh-TW' | 'en-US'
 
@@ -473,6 +476,7 @@ export interface SkinRuntimeSelection {
   championName: string
   skinId: number
   skinName: string
+  chromaId?: number
 }
 
 export interface SkinRuntimeState extends LooseRecord {
@@ -482,6 +486,47 @@ export interface SkinRuntimeState extends LooseRecord {
   message: string
   selection: SkinRuntimeSelection | null
   dependencyDirectory: string
+  timing?: { phase: string; ms: number }[]
+}
+
+export interface SkinMemoryEntry {
+  championId: number
+  skinId: number
+  chromaId?: number
+  skinName: string
+  championAlias: string
+  timestamp: number
+}
+
+export interface SkinHistoryEntry {
+  skinId: number
+  chromaId?: number
+  skinName: string
+  championName: string
+  championAlias: string
+  championId: number
+  imageUrl: string
+  timestamp: number
+  source: 'manual' | 'random' | 'local'
+}
+
+export interface SkinRandomSettings {
+  mode: 'skin' | 'chroma' | 'both'
+  scope: 'owned' | 'all'
+  championFilter: 'current' | 'any'
+}
+
+export interface LocalModEntry {
+  filename: string
+  size: number
+  championId: number | null
+  skinId: number | null
+  enabled: boolean
+  status: 'ready' | 'disabled' | 'corrupt' | 'unknown'
+}
+
+export interface ScanLocalModsResult extends OperationResult {
+  mods?: LocalModEntry[]
 }
 
 export interface ElectronEventMap {
@@ -592,6 +637,9 @@ export interface ElectronAPI {
     prepare(selection: SkinRuntimeSelection): Promise<SkinRuntimeState>
     clear(): Promise<SkinRuntimeState>
     importDll(): Promise<OperationResult & { data?: SkinRuntimeState }>
+    scanLocalMods(): Promise<ScanLocalModsResult>
+    toggleMod(filename: string, enabled: boolean): Promise<OperationResult>
+    deleteMod(filename: string): Promise<OperationResult>
   }
   lcu: {
     getChampionMonitorState(): Promise<ChampionMonitorState>
@@ -614,6 +662,7 @@ export interface ElectronAPI {
     getChampionList(): Promise<ChampionListResult>
     getChampionSkins(championId: number): Promise<ChampionSkinsResult>
     setMySelectionSkin(skinId: number): Promise<SkinSelectResult>
+    setMySelectionChroma(skinId: number, chromaId: number): Promise<SkinSelectResult>
     getDecorations(): Promise<DecorationsResult>
     getPartySkins(): Promise<PartySkinsResult>
     setSummonerEmote(emoteId: number): Promise<OperationResult>

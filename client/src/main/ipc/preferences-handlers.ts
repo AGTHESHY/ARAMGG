@@ -30,6 +30,9 @@ const RENDERER_STORE_KEYS = new Set<AppStoreKey>([
   'lobbyStats.enabled',
   'aramBenchSwap.enabled',
   'skinMods.directory',
+  'skinMemory',
+  'skinHistory',
+  'skinRandomSettings',
 ])
 
 function assertRendererStoreKey(key: unknown): asserts key is AppStoreKey {

@@ -30,17 +30,24 @@
       >
         <img
           :src="getChampionIcon(member.championId)"
-          :alt="member.summonerName"
+          :alt="getChampionName(member.championId)"
           class="party-champion-icon"
           @error="onImgError"
         />
         <div class="party-info">
           <strong class="party-name">{{ member.summonerName || '玩家 ' + member.cellId }}</strong>
+          <span class="party-champion">{{ getChampionName(member.championId) }}</span>
           <span class="party-skin" v-if="member.selectedSkinId && member.selectedSkinId > 0">
-            皮肤 #{{ member.selectedSkinId }}
+            {{ getSkinName(member.championId, member.selectedSkinId) }}
           </span>
           <span class="party-skin none" v-else>
             未选择皮肤
+          </span>
+          <span
+            v-if="getChromaId(member) > 0"
+            class="party-chroma"
+          >
+            炫彩 #{{ getChromaId(member) }}
           </span>
           <div v-if="member.selectedSkinId && member.selectedSkinId > 0" class="party-skin-image">
             <img
@@ -75,13 +82,40 @@ const members = ref<PartyMember[]>([])
 const loading = ref(false)
 const error = ref('')
 
+// championId -> { name, alias }
+const champions = ref<Map<number, { name: string; alias: string }>>(new Map())
+// championId -> skinId -> skinName
+const skinCache = ref<Map<number, Map<number, string>>>(new Map())
+
 let pollTimer: ReturnType<typeof setInterval> | null = null
+let isLoading = false
 
 const getChampionIcon = (championId: number) => getChampionSquareIconUrl(championId)
 
+const getChampionName = (championId: number): string => {
+  const champ = champions.value.get(championId)
+  return champ ? champ.name : ''
+}
+
+const getSkinName = (championId: number, skinId: number): string => {
+  const skins = skinCache.value.get(championId)
+  if (skins) {
+    const name = skins.get(skinId)
+    if (name) return name
+  }
+  return `皮肤 #${skinId}`
+}
+
+const getChromaId = (member: PartyMember): number => {
+  const raw = (member.selectedChromaId ?? member.chromaId) as unknown
+  const v = typeof raw === 'number' ? raw : Number(raw)
+  return Number.isFinite(v) && v > 0 ? v : 0
+}
+
 const getSkinImage = (championId: number, skinId: number): string => {
   const skinNum = skinId - championId * 1000
-  const alias = ''
+  const champ = champions.value.get(championId)
+  const alias = champ ? champ.alias : ''
   return `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${alias}_${skinNum}.jpg`
 }
 
@@ -90,13 +124,63 @@ const onImgError = (e: Event) => {
   img.style.opacity = '0.2'
 }
 
+const loadChampions = async () => {
+  if (champions.value.size > 0) return
+  try {
+    const result = await electronAPI.lcu.getChampionList()
+    if (result.success && result.champions) {
+      const map = new Map<number, { name: string; alias: string }>()
+      for (const c of result.champions) {
+        map.set(c.id, { name: c.name, alias: c.alias })
+      }
+      champions.value = map
+    }
+  } catch {
+    // silent
+  }
+}
+
+const ensureSkinData = async (championId: number) => {
+  if (skinCache.value.has(championId)) return
+  try {
+    const result = await electronAPI.lcu.getChampionSkins(championId)
+    if (result.success && result.data && result.data.skins) {
+      const skinMap = new Map<number, string>()
+      for (const skin of result.data.skins) {
+        if (skin.skinName) skinMap.set(skin.skinId, skin.skinName)
+      }
+      const next = new Map(skinCache.value)
+      next.set(championId, skinMap)
+      skinCache.value = next
+    }
+  } catch {
+    // silent
+  }
+}
+
+const refreshSkinDataForMembers = async () => {
+  const uniqueChampionIds = new Set<number>()
+  for (const m of members.value) {
+    if (m.selectedSkinId && m.selectedSkinId > 0) {
+      uniqueChampionIds.add(m.championId)
+    }
+  }
+  await Promise.all(Array.from(uniqueChampionIds).map((id) => ensureSkinData(id)))
+}
+
 const loadPartySkins = async () => {
+  if (isLoading) return
+  isLoading = true
   loading.value = true
   error.value = ''
   try {
+    if (champions.value.size === 0) {
+      await loadChampions()
+    }
     const result = await electronAPI.lcu.getPartySkins()
     if (result.success) {
       members.value = (result.members || []) as unknown as PartyMember[]
+      await refreshSkinDataForMembers()
     } else {
       error.value = result.error || '无法获取队友皮肤信息'
     }
@@ -104,11 +188,13 @@ const loadPartySkins = async () => {
     error.value = '连接客户端失败'
   } finally {
     loading.value = false
+    isLoading = false
   }
 }
 
-onMounted(() => {
-  loadPartySkins()
+onMounted(async () => {
+  await loadChampions()
+  await loadPartySkins()
   pollTimer = setInterval(loadPartySkins, 3000)
 })
 
@@ -237,6 +323,14 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
 }
 
+.party-champion {
+  font-size: 11px;
+  color: #80909d;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .party-skin {
   font-size: 11px;
   color: #e6c58e;
@@ -244,6 +338,17 @@ onBeforeUnmount(() => {
 
 .party-skin.none {
   color: #55606a;
+}
+
+.party-chroma {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 10px;
+  color: #b9a3d6;
+  padding: 1px 6px;
+  border: 1px solid rgba(185, 163, 214, 0.25);
+  background: rgba(185, 163, 214, 0.06);
+  border-radius: 2px;
 }
 
 .party-skin-image {

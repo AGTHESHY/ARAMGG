@@ -141,6 +141,9 @@ const electronAPI: ElectronAPI = {
     prepare: (selection) => ipcRenderer.invoke('skin-runtime-prepare', selection),
     clear: () => ipcRenderer.invoke('skin-runtime-clear'),
     importDll: () => ipcRenderer.invoke('skin-runtime-import-dll'),
+    scanLocalMods: () => ipcRenderer.invoke('skin-runtime-scan-local-mods'),
+    toggleMod: (filename, enabled) => ipcRenderer.invoke('skin-runtime-toggle-mod', filename, enabled),
+    deleteMod: (filename) => ipcRenderer.invoke('skin-runtime-delete-mod', filename),
   },
   lcu: {
     getChampionMonitorState: () => ipcRenderer.invoke('lcu-get-champion-monitor-state'),
@@ -163,6 +166,7 @@ const electronAPI: ElectronAPI = {
     getChampionList: () => ipcRenderer.invoke('lcu-get-champion-list'),
     getChampionSkins: (championId) => ipcRenderer.invoke('lcu-get-champion-skins', championId),
     setMySelectionSkin: (skinId) => ipcRenderer.invoke('lcu-set-my-selection-skin', skinId),
+    setMySelectionChroma: (skinId, chromaId) => ipcRenderer.invoke('lcu-set-my-selection-chroma', skinId, chromaId),
     getDecorations: () => ipcRenderer.invoke('lcu-get-decorations'),
     getPartySkins: () => ipcRenderer.invoke('lcu-get-party-skins'),
     setSummonerEmote: (emoteId) => ipcRenderer.invoke('lcu-set-summoner-emote', emoteId),
