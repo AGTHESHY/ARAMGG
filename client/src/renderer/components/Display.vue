@@ -311,20 +311,12 @@
 
                     <footer class="hex-footer">
                         <p>
-                            {{ t('display.brand') }} v{{ clientVersionLabel }} -
-                            <a class="footer-link" :href="ARAMGG_HOME_URL" @click.prevent="openAramggHome">
-                                {{ ARAMGG_HOME_LABEL }}
-                            </a>
+                            {{ t('display.brand') }} v{{ clientVersionLabel }}
                             <span class="footer-separator">·</span>
                             <button class="footer-link footer-action" type="button" @click="openLogDirectory">
                                 {{ t('display.logDirectory') }}
                             </button>
                             <span class="footer-separator">·</span>
-                            <a class="footer-link" :href="DATA_API_URL" @click.prevent="openDataApi">
-                                {{ DATA_API_LABEL }}
-                            </a>
-                        </p>
-                        <p class="footer-meta">
                             <a class="footer-link" :href="GITHUB_URL" @click.prevent="openGithub">
                                 GitHub
                             </a>
@@ -332,6 +324,11 @@
                             <button class="footer-link footer-action" type="button" @click="openChangelog">
                                 {{ t('display.changelog') }}
                             </button>
+                        </p>
+                        <p class="footer-meta">
+                            <a class="footer-link footer-api-link" :href="DATA_API_URL" @click.prevent="openDataApi">
+                                （开放API）
+                            </a>
                         </p>
                     </footer>
                 </div>
@@ -485,11 +482,8 @@ const supportedLocales = ref([
     { code: 'zh-TW', label: 'Traditional Chinese', nativeLabel: '繁體中文' },
 ])
 const localeLoading = ref(false)
-const ARAMGG_HOME_URL = 'https://aramgg.com'
-const ARAMGG_HOME_LABEL = 'aramgg.com'
 const DATA_API_URL = 'https://data.dtodo.cn'
-const DATA_API_LABEL = computed(() => t('display.openApi'))
-const GITHUB_URL = 'https://github.com/valkia/aramgg_client'
+const GITHUB_URL = 'https://github.com/AGTHESHY/ARAMGG'
 let removeQuitConfirmListener = null
 let removeLocaleChangedListener = null
 let removePhaseListener = null
@@ -839,14 +833,6 @@ const openDownloadUrl = async () => {
         await electronAPI.shell.openExternal(url)
     } catch (error) {
         console.warn('Failed to open update download url:', error)
-    }
-}
-
-const openAramggHome = async () => {
-    try {
-        await electronAPI.shell.openExternal(ARAMGG_HOME_URL)
-    } catch (error) {
-        console.warn('Failed to open ARAMGG home:', error)
     }
 }
 
@@ -2249,6 +2235,20 @@ onMounted(async () => {
 
 .hex-footer .footer-meta {
     margin-top: 6px;
+}
+
+.footer-api-link {
+    color: #9be8dc !important;
+    font-weight: 900;
+    text-decoration: underline;
+    text-decoration-color: rgba(155, 232, 220, 0.4);
+    text-underline-offset: 2px;
+    transition: color 120ms ease, text-decoration-color 120ms ease;
+}
+
+.footer-api-link:hover {
+    color: #b9f2e8 !important;
+    text-decoration-color: rgba(155, 232, 220, 0.8);
 }
 
 .footer-separator {
