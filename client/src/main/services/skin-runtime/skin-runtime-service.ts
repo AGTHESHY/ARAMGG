@@ -6,6 +6,7 @@ import https from 'https'
 import path from 'path'
 import { createRequire } from 'module'
 import logger from '../../modules/logger.ts'
+import { GameProcessMonitor } from './game-process-monitor.ts'
 
 const require = createRequire(import.meta.url)
 const AdmZip = require('adm-zip') as new (file: string) => { extractAllTo(destination: string, overwrite: boolean): void }
@@ -38,8 +39,10 @@ const state: SkinRuntimeState = {
 }
 
 let activeProcess: ChildProcess | null = null
+let activePreparationProcess: ChildProcess | null = null
 let operationGeneration = 0
 let pendingApplyLeagueRoot = ''
+let gameProcessMonitor: GameProcessMonitor | null = null
 
 function runtimeRoot(): string {
   const userData = typeof app?.getPath === 'function'
@@ -50,6 +53,11 @@ function runtimeRoot(): string {
 
 function toolsDirectory(): string {
   return path.join(runtimeRoot(), 'tools')
+}
+
+function getGameProcessMonitor(): GameProcessMonitor {
+  gameProcessMonitor ||= new GameProcessMonitor(runtimeRoot())
+  return gameProcessMonitor
 }
 
 function emitState(): void {
@@ -170,6 +178,11 @@ export async function prepareSkin(selection: SkinRuntimeSelection): Promise<Skin
   }
   if (!Number.isInteger(normalized.championId) || !Number.isInteger(normalized.skinId)) throw new Error('无效的英雄或皮肤编号')
   const generation = ++operationGeneration
+  if (activePreparationProcess && !activePreparationProcess.killed) activePreparationProcess.kill()
+  if (activeProcess && !activeProcess.killed) activeProcess.kill()
+  activePreparationProcess = null
+  activeProcess = null
+  await gameProcessMonitor?.stop('skin selection changed')
   state.selection = normalized
   try {
     await ensureDependencies()
@@ -190,6 +203,7 @@ export async function prepareSkin(selection: SkinRuntimeSelection): Promise<Skin
 function run(command: string, args: string[], timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    activePreparationProcess = child
     let output = ''
     const timer = setTimeout(() => { child.kill(); reject(new Error('生成皮肤覆盖层超时')) }, timeoutMs)
     child.stdout?.on('data', chunk => { output += chunk.toString() })
@@ -197,6 +211,7 @@ function run(command: string, args: string[], timeoutMs: number): Promise<void> 
     child.once('error', error => { clearTimeout(timer); reject(error) })
     child.once('exit', code => {
       clearTimeout(timer)
+      if (activePreparationProcess === child) activePreparationProcess = null
       if (code === 0) resolve()
       else reject(new Error(`本地替换工具执行失败（${code ?? 'unknown'}）：${output.slice(-500)}`))
     })
@@ -209,11 +224,13 @@ export async function applyPreparedSkin(leagueRoot: string): Promise<SkinRuntime
   if (state.phase === 'downloading') return getSkinRuntimeState()
   if (!['prepared', 'error'].includes(state.phase)) return getSkinRuntimeState()
   const generation = operationGeneration
+  const processMonitor = getGameProcessMonitor()
   try {
     await ensureDependencies()
     const gameDirectory = path.basename(leagueRoot).toLowerCase() === 'game' ? leagueRoot : path.join(leagueRoot, 'Game')
     if (!(await exists(path.join(gameDirectory, 'League of Legends.exe')))) throw new Error('未找到游戏目录，请先在设置中选择 League of Legends 安装目录')
     const archive = skinArchivePath(state.selection)
+    await processMonitor.start()
     const mods = path.join(runtimeRoot(), 'mods')
     const overlay = path.join(runtimeRoot(), 'overlay')
     await rm(mods, { recursive: true, force: true }); await rm(overlay, { recursive: true, force: true })
@@ -224,8 +241,16 @@ export async function applyPreparedSkin(leagueRoot: string): Promise<SkinRuntime
     setState({ phase: 'applying', message: `正在生成 ${state.selection.skinName} 的本地覆盖层…` })
     const tool = path.join(toolsDirectory(), 'mod-tools.exe')
     await run(tool, ['mkoverlay', mods, overlay, `--game:${gameDirectory}`, `--mods:${modName}`, '--noTFT', '--ignoreConflict'], 120_000)
-    if (generation !== operationGeneration) return getSkinRuntimeState()
-    activeProcess = spawn(tool, ['runoverlay', overlay, path.join(overlay, 'cslol-config.json'), `--game:${gameDirectory}`, '--opts:configless'], { windowsHide: true, detached: false, stdio: 'ignore' })
+    if (generation !== operationGeneration) {
+      await processMonitor.stop('skin selection changed during overlay preparation')
+      return getSkinRuntimeState()
+    }
+    activeProcess = await new Promise<ChildProcess>((resolve, reject) => {
+      const child = spawn(tool, ['runoverlay', overlay, path.join(overlay, 'cslol-config.json'), `--game:${gameDirectory}`, '--opts:configless'], { windowsHide: true, detached: false, stdio: 'ignore' })
+      child.once('spawn', () => resolve(child))
+      child.once('error', reject)
+    })
+    await processMonitor.markOverlayStarted()
     activeProcess.once('exit', code => {
       activeProcess = null
       if (generation === operationGeneration && state.phase === 'active') setState({ phase: code === 0 ? 'prepared' : 'error', message: code === 0 ? '本局本地替换已结束' : `本地覆盖层意外退出（${code}）` })
@@ -233,6 +258,7 @@ export async function applyPreparedSkin(leagueRoot: string): Promise<SkinRuntime
     setState({ phase: 'active', message: `${state.selection.skinName} 的本地替换正在运行` })
     pendingApplyLeagueRoot = ''
   } catch (error) {
+    await processMonitor.stop('skin apply failed')
     logger.warn('[skin-runtime] apply failed', error)
     if (generation === operationGeneration) setState({ phase: 'error', message: error instanceof Error ? error.message : String(error) })
   }
@@ -243,7 +269,10 @@ export async function clearPreparedSkin(): Promise<SkinRuntimeState> {
   operationGeneration += 1
   pendingApplyLeagueRoot = ''
   if (activeProcess && !activeProcess.killed) activeProcess.kill()
+  if (activePreparationProcess && !activePreparationProcess.killed) activePreparationProcess.kill()
+  await getGameProcessMonitor().stop('local skin cancelled')
   activeProcess = null
+  activePreparationProcess = null
   state.selection = null
   setState({ phase: state.supported ? 'idle' : 'unsupported', progress: 0, message: state.supported ? '已取消本地皮肤' : state.message })
   return getSkinRuntimeState()
@@ -252,7 +281,10 @@ export async function clearPreparedSkin(): Promise<SkinRuntimeState> {
 export async function stopSkinOverlay(): Promise<SkinRuntimeState> {
   pendingApplyLeagueRoot = ''
   if (activeProcess && !activeProcess.killed) activeProcess.kill()
+  if (activePreparationProcess && !activePreparationProcess.killed) activePreparationProcess.kill()
+  await getGameProcessMonitor().stop('game ended')
   activeProcess = null
+  activePreparationProcess = null
   if (state.selection) {
     setState({ phase: 'prepared', message: `${state.selection.skinName} 已缓存，可在下一局继续使用` })
   }

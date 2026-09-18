@@ -1330,14 +1330,14 @@ async function initGameFlowMonitor() {
                         void prepareAndNotifyPostGameShare(lcuService, 'LCU phase WaitingForStats')
                         resetChampSelectItemSetState('LCU phase WaitingForStats')
                         stopAutoScreenshotForGame('LCU phase WaitingForStats')
-                        void stopSkinOverlay()
+                        await stopSkinOverlay()
                         break
                     case 'ENTER_PRE_END_OF_GAME':
                         logger.info('游戏结束统计阶段')
                         void prepareAndNotifyPostGameShare(lcuService, 'LCU phase PreEndOfGame')
                         resetChampSelectItemSetState('LCU phase PreEndOfGame')
                         stopAutoScreenshotForGame('LCU phase PreEndOfGame')
-                        void stopSkinOverlay()
+                        await stopSkinOverlay()
                         break
                     case 'ENTER_END_OF_GAME':
                         logger.info('游戏完全结束')
@@ -1345,7 +1345,7 @@ async function initGameFlowMonitor() {
                         void prepareAndNotifyPostGameShare(lcuService, 'LCU phase EndOfGame')
                         resetChampSelectItemSetState('LCU phase EndOfGame')
                         stopAutoScreenshotForGame('LCU phase EndOfGame')
-                        void stopSkinOverlay()
+                        await stopSkinOverlay()
                         break
                 }
             }
@@ -1565,6 +1565,7 @@ async function runQuitCleanup(reason = 'app quit') {
 
     stopGameflowMonitorRuntime('app will quit')
     stopLocalMatchHistoryBackgroundSync()
+    await stopSkinOverlay()
 
     if (autoScreenshotService && autoScreenshotService.isRunning) {
         autoScreenshotService.stop()
