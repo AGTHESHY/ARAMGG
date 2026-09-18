@@ -16,11 +16,16 @@ function getBundledPenguLoaderPath(): string {
     : path.join(__dirname, '..', '..', 'resources', 'pengu-loader')
 }
 
-/** 程序自带的 aramgg-stats 插件路径 */
-function getBundledPluginPath(): string {
+/** 程序自带的 aramgg-stats 插件目录路径 */
+function getBundledPluginDir(): string {
   return app.isPackaged
-    ? path.join(process.resourcesPath, 'plugin', PLUGIN_DIR_NAME, PLUGIN_ENTRY)
-    : path.join(__dirname, '..', '..', 'plugin', PLUGIN_DIR_NAME, PLUGIN_ENTRY)
+    ? path.join(process.resourcesPath, 'plugin', PLUGIN_DIR_NAME)
+    : path.join(__dirname, '..', '..', 'plugin', PLUGIN_DIR_NAME)
+}
+
+/** 程序自带的 aramgg-stats 插件入口文件路径 */
+function getBundledPluginPath(): string {
+  return path.join(getBundledPluginDir(), PLUGIN_ENTRY)
 }
 
 /** 检查是否已自带 Pengu Loader */
@@ -187,18 +192,22 @@ export async function installPenguPlugin() {
 
     const pluginsDir = path.join(penguPath, 'plugins')
     const targetDir = path.join(pluginsDir, PLUGIN_DIR_NAME)
-    const targetFile = path.join(targetDir, PLUGIN_ENTRY)
-    const sourceFile = getBundledPluginPath()
+    const sourceDir = getBundledPluginDir()
 
-    if (!fs.existsSync(sourceFile)) {
+    if (!fs.existsSync(path.join(sourceDir, PLUGIN_ENTRY))) {
       return { success: false, error: '插件源文件不存在' }
     }
 
-    fs.mkdirSync(targetDir, { recursive: true })
-    fs.copyFileSync(sourceFile, targetFile)
+    // 清理旧安装
+    if (fs.existsSync(targetDir)) {
+      fs.rmSync(targetDir, { recursive: true, force: true })
+    }
 
-    logger.info('[PenguPlugin] Plugin installed to:', targetFile)
-    return { success: true, data: { pluginPath: targetFile, penguPath } }
+    // 复制整个插件目录（包含 index.js + package.json）
+    copyDirRecursive(sourceDir, targetDir)
+
+    logger.info('[PenguPlugin] Plugin installed to:', targetDir)
+    return { success: true, data: { pluginPath: path.join(targetDir, PLUGIN_ENTRY), penguPath } }
   } catch (error) {
     logger.error('[PenguPlugin] Install failed:', error)
     return { success: false, error: `安装失败: ${error instanceof Error ? error.message : String(error)}` }
