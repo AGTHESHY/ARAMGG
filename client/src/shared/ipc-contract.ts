@@ -646,6 +646,7 @@ export interface ElectronAPI {
     installPlugin(): Promise<OperationResult & { data?: { pluginPath: string } }>
     uninstallPlugin(): Promise<OperationResult>
     openPluginsFolder(): Promise<OperationResult>
+    writeSettings(settings: LooseRecord): Promise<OperationResult>
   }
   lcu: {
     getChampionMonitorState(): Promise<ChampionMonitorState>

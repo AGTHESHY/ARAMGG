@@ -43,15 +43,15 @@ const preferenceDefinitions = [
     key: 'showTeammateWinrate',
     storeKey: 'teammateWinrate.enabled',
     defaultValue: true,
-    title: '选人阶段队友战绩悬浮窗',
-    description: '在英雄选择阶段自动显示队友的胜率、KDA 和综合评分，点击队友卡片可查看详细战绩。',
+    title: '选人阶段队友战绩',
+    description: '在英雄选择阶段于客户端内直接显示队友的胜率、KDA 和综合评分。',
   },
   {
     key: 'showLobbyStats',
     storeKey: 'lobbyStats.enabled',
     defaultValue: true,
     title: '组队大厅队友战绩',
-    description: '在组队大厅自动查询并展示队友最近 50 局的胜率、KDA 和综合评分。',
+    description: '在组队大厅于客户端内直接显示队友最近 50 局的胜率、KDA 和综合评分。',
   },
   {
     key: 'showTeammateParticleEffects',
@@ -96,6 +96,23 @@ const loadPreferences = async () => {
       console.warn('读取战绩偏好失败:', item.storeKey, error)
     }
   }
+
+  await syncPluginSettings()
+}
+
+const syncPluginSettings = async () => {
+  if (!hasElectronAPI()) {
+    return
+  }
+  try {
+    const settings = {}
+    for (const item of preferenceDefinitions) {
+      settings[item.key] = preferences[item.key]
+    }
+    await electronAPI.penguPlugin.writeSettings(settings)
+  } catch (error) {
+    console.warn('同步插件设置失败:', error)
+  }
 }
 
 const togglePreference = async (key) => {
@@ -114,6 +131,7 @@ const togglePreference = async (key) => {
   try {
     await electronAPI.store.set(item.storeKey, nextValue)
     preferences[key] = nextValue
+    await electronAPI.penguPlugin.writeSettings({ [item.key]: nextValue })
   } catch (error) {
     console.warn('保存战绩偏好失败:', item.storeKey, error)
     preferences[key] = !nextValue

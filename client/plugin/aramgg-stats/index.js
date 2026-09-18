@@ -6,6 +6,61 @@
  * @link https://github.com/WJZ-P/aramgg
  */
 
+// ==================== 设置 ====================
+let pluginSettings = {
+  showTeammateWinrate: true,
+  showLobbyStats: true,
+  showTeammateParticleEffects: true,
+}
+
+let settingsWatcher = null
+
+function loadSettings() {
+  try {
+    const fs = require('fs')
+    const path = require('path')
+    const settingsPath = path.join(__dirname, 'settings.json')
+    if (fs.existsSync(settingsPath)) {
+      const content = fs.readFileSync(settingsPath, 'utf-8')
+      const parsed = JSON.parse(content)
+      pluginSettings = { ...pluginSettings, ...parsed }
+    }
+  } catch (e) {
+    error('Failed to load settings:', e)
+  }
+}
+
+function watchSettings() {
+  try {
+    const fs = require('fs')
+    const path = require('path')
+    const settingsPath = path.join(__dirname, 'settings.json')
+    if (settingsWatcher) settingsWatcher.close()
+    settingsWatcher = fs.watch(settingsPath, { persistent: false }, (eventType) => {
+      if (eventType !== 'change') return
+      const prev = { ...pluginSettings }
+      loadSettings()
+      log('Settings reloaded:', pluginSettings)
+      applySettingsDiff(prev)
+    })
+  } catch (e) {
+    warn('Settings watch failed:', e)
+  }
+}
+
+function applySettingsDiff(prev) {
+  if (prev.showLobbyStats !== pluginSettings.showLobbyStats) {
+    updateLobbyStats(pluginSettings.showLobbyStats, penguContext)
+  }
+  if (prev.showTeammateWinrate !== pluginSettings.showTeammateWinrate) {
+    updateChampSelectStats(pluginSettings.showTeammateWinrate, penguContext)
+  }
+  if (prev.showTeammateParticleEffects !== pluginSettings.showTeammateParticleEffects) {
+    cleanupInjectedDOM()
+    if (champSelectRegistered) tryInjectChampSelectStats()
+  }
+}
+
 // ==================== 常量 ====================
 const STATS_ATTR = 'data-aramgg-stats'
 const STATS_TEXT_ATTR = 'data-aramgg-stats-text'
@@ -411,8 +466,10 @@ function tryInjectChampSelectStats() {
         iconContainer.style.position = 'relative'
         iconContainer.style.overflow = 'visible'
         iconContainer.style.borderRadius = '50%'
-        const config = getTierConfig(winRate)
-        if (config.boxShadow) iconContainer.style.boxShadow = config.boxShadow
+        if (pluginSettings.showTeammateParticleEffects) {
+          const config = getTierConfig(winRate)
+          if (config.boxShadow) iconContainer.style.boxShadow = config.boxShadow
+        }
       }
 
       if (!iconContainer.hasAttribute(CLICK_ATTR) && stat.puuid) {
@@ -585,8 +642,14 @@ export function init(context) {
 
 export function load() {
   log('Plugin loading...')
+  loadSettings()
+  watchSettings()
   startObserver()
-  updateLobbyStats(true, penguContext)
-  updateChampSelectStats(true, penguContext)
+  if (pluginSettings.showLobbyStats) {
+    updateLobbyStats(true, penguContext)
+  }
+  if (pluginSettings.showTeammateWinrate) {
+    updateChampSelectStats(true, penguContext)
+  }
   log('Plugin loaded successfully')
 }

@@ -150,6 +150,7 @@ const electronAPI: ElectronAPI = {
     installPlugin: () => ipcRenderer.invoke('pengu-plugin-install'),
     uninstallPlugin: () => ipcRenderer.invoke('pengu-plugin-uninstall'),
     openPluginsFolder: () => ipcRenderer.invoke('pengu-plugin-open-folder'),
+    writeSettings: (settings) => ipcRenderer.invoke('pengu-plugin-write-settings', settings),
   },
   lcu: {
     getChampionMonitorState: () => ipcRenderer.invoke('lcu-get-champion-monitor-state'),

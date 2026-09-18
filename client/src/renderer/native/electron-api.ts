@@ -98,6 +98,7 @@ export const electronAPI: ElectronAPI = {
     installPlugin: (...args) => requireElectronAPI().penguPlugin.installPlugin(...args),
     uninstallPlugin: (...args) => requireElectronAPI().penguPlugin.uninstallPlugin(...args),
     openPluginsFolder: (...args) => requireElectronAPI().penguPlugin.openPluginsFolder(...args),
+    writeSettings: (...args) => requireElectronAPI().penguPlugin.writeSettings(...args),
   },
   lcu: {
     getChampionMonitorState: () => requireElectronAPI().lcu.getChampionMonitorState(),

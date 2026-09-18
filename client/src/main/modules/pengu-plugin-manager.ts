@@ -149,9 +149,27 @@ export async function openPluginsFolder() {
   }
 }
 
+export async function writePenguPluginSettings(settings: Record<string, unknown>) {
+  try {
+    const penguPath = await findPenguLoaderPath()
+    if (!penguPath) {
+      return { success: false, error: '未找到 Pengu Loader' }
+    }
+    const pluginDir = path.join(penguPath, 'plugins', PLUGIN_DIR_NAME)
+    const settingsFile = path.join(pluginDir, 'settings.json')
+    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2), 'utf-8')
+    logger.info('[PenguPlugin] Settings written:', settingsFile)
+    return { success: true }
+  } catch (error) {
+    logger.error('[PenguPlugin] Write settings failed:', error)
+    return { success: false, error: '写入插件设置失败' }
+  }
+}
+
 export function registerPenguPluginIpcHandlers() {
   ipcMain.handle('pengu-plugin-get-status', () => getPenguPluginStatus())
   ipcMain.handle('pengu-plugin-install', () => installPenguPlugin())
   ipcMain.handle('pengu-plugin-uninstall', () => uninstallPenguPlugin())
   ipcMain.handle('pengu-plugin-open-folder', () => openPluginsFolder())
+  ipcMain.handle('pengu-plugin-write-settings', (_event, settings) => writePenguPluginSettings(settings))
 }

@@ -845,12 +845,8 @@ async function showTeammateWinrates(lcuService, snapshot) {
     try {
         const payload = await queryTeammateWinrates(lcuService, snapshot)
         if (getChampionMonitorState().phase !== 'ChampSelect' || signature !== lastTeammateWinrateSignature) return
-        const window = await ensureFloatingWindow()
-        if (window.isDestroyed()) return
-        applyFloatingWindowLayout()
-        window.webContents.send('teammate-winrate-updated', payload)
-        raiseOverlayWindow(window, 'teammate-winrate')
-        logger.info('[teammate-winrate] overlay updated', {
+        notifyAllWindows('teammate-winrate-updated', payload)
+        logger.info('[teammate-winrate] data updated', {
             queueId: payload.queueId,
             teammateCount: payload.entries.length,
             availableCount: payload.entries.filter(entry => entry.winRate != null).length,
@@ -906,13 +902,7 @@ async function showLobbyStats(lcuService) {
         const payload = await queryLobbyMemberStats(lcuService, lobby, 50)
         notifyAllWindows('lobby-stats-updated', payload)
 
-        const floatingWindow = await ensureFloatingWindow()
-        if (!floatingWindow.isDestroyed()) {
-            applyFloatingWindowLayout()
-            raiseOverlayWindow(floatingWindow, 'lobby-stats')
-        }
-
-        logger.info('[lobby-stats] overlay updated', {
+        logger.info('[lobby-stats] data updated', {
             queueId: payload.queueId,
             memberCount: payload.members.length,
             availableCount: payload.members.filter(m => m.winRate != null).length,

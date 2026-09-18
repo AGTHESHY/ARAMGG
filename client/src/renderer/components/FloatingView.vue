@@ -1,16 +1,12 @@
 <template>
-  <div class="floating-view">
-    <AugmentFloatingOverlay />
-    <LobbyStatsOverlay />
-    <TeammateWinrateOverlay />
-  </div>
+ <div class="floating-view">
+ <AugmentFloatingOverlay />
+ </div>
 </template>
 
 <script setup>
 import { onBeforeUnmount, onMounted } from 'vue'
 import AugmentFloatingOverlay from './AugmentFloatingOverlay.vue'
-import LobbyStatsOverlay from './LobbyStatsOverlay.vue'
-import TeammateWinrateOverlay from './TeammateWinrateOverlay.vue'
 
 const overlayWindowClass = 'floating-overlay-window'
 
