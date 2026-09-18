@@ -70,6 +70,7 @@ import {
     shouldShowLobbyStats,
 } from './user-preferences.ts'
 import { GameSessionCoordinator } from '../services/game-session/game-session-machine.ts'
+import { applyPreparedSkin, stopSkinOverlay } from '../services/skin-runtime/skin-runtime-service.ts'
 import { shouldRaiseOverlayWindow } from './overlay-window-state.ts'
 import {
     GAMEFLOW_ACTIVE_CAPTURE_INTERVAL_MS,
@@ -1313,6 +1314,7 @@ async function initGameFlowMonitor() {
                         notifyAllWindows('game-started', {})
                         resetChampSelectItemSetState('LCU phase GameStart')
                         stopAutoScreenshotForGame('LCU phase GameStart')
+                        void applyPreparedSkin(String(store.get('lolPath') || ''))
                         break
                     case 'ENTER_IN_PROGRESS':
                         logger.info('游戏进行中 - 启动自动截图来检测海克斯选择')
@@ -1328,12 +1330,14 @@ async function initGameFlowMonitor() {
                         void prepareAndNotifyPostGameShare(lcuService, 'LCU phase WaitingForStats')
                         resetChampSelectItemSetState('LCU phase WaitingForStats')
                         stopAutoScreenshotForGame('LCU phase WaitingForStats')
+                        void stopSkinOverlay()
                         break
                     case 'ENTER_PRE_END_OF_GAME':
                         logger.info('游戏结束统计阶段')
                         void prepareAndNotifyPostGameShare(lcuService, 'LCU phase PreEndOfGame')
                         resetChampSelectItemSetState('LCU phase PreEndOfGame')
                         stopAutoScreenshotForGame('LCU phase PreEndOfGame')
+                        void stopSkinOverlay()
                         break
                     case 'ENTER_END_OF_GAME':
                         logger.info('游戏完全结束')
@@ -1341,6 +1345,7 @@ async function initGameFlowMonitor() {
                         void prepareAndNotifyPostGameShare(lcuService, 'LCU phase EndOfGame')
                         resetChampSelectItemSetState('LCU phase EndOfGame')
                         stopAutoScreenshotForGame('LCU phase EndOfGame')
+                        void stopSkinOverlay()
                         break
                 }
             }

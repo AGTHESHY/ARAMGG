@@ -46,6 +46,12 @@ import { getAramBenchRecommendation } from '../services/aram/bench-recommendatio
 import { registerPreferencesIpcHandlers } from '../ipc/preferences-handlers.ts'
 import { registerSystemIpcHandlers } from '../ipc/system-handlers.ts'
 import { trustedIpcMain as ipcMain } from '../security/trusted-ipc.ts'
+import {
+    clearPreparedSkin,
+    installSkinRuntimeDll,
+    prepareSkin,
+    refreshSkinRuntimeState,
+} from '../services/skin-runtime/skin-runtime-service.ts'
 import { shouldRaiseOverlayWindow } from './overlay-window-state.ts'
 import { deleteDeveloperKey, getDeveloperKeyStatus, saveDeveloperKey } from '../services/developer-key-service.ts'
 import {
@@ -368,6 +374,22 @@ async function buildRandomBenchRecommendation(currentChampionId: number | null =
 export function registerIpcHandlers(isDev: boolean): void {
     registerPreferencesIpcHandlers()
     registerSystemIpcHandlers()
+    ipcMain.handle('skin-runtime-get-state', () => refreshSkinRuntimeState())
+    ipcMain.handle('skin-runtime-prepare', (_event, selection) => prepareSkin(selection))
+    ipcMain.handle('skin-runtime-clear', () => clearPreparedSkin())
+    ipcMain.handle('skin-runtime-import-dll', async () => {
+        const result = await dialog.showOpenDialog({
+            title: '导入本地替换运行依赖',
+            properties: ['openFile'],
+            filters: [{ name: 'CSLOL runtime', extensions: ['dll'] }],
+        })
+        if (result.canceled || !result.filePaths[0]) return { success: false, error: '已取消导入' }
+        try {
+            return { success: true, data: await installSkinRuntimeDll(result.filePaths[0]) }
+        } catch (error) {
+            return { success: false, error: error instanceof Error ? error.message : String(error) }
+        }
+    })
     ipcMain.handle('developer-key-status', () => getDeveloperKeyStatus())
     ipcMain.handle('developer-key-save', (_event, key) => saveDeveloperKey(key))
     ipcMain.handle('developer-key-delete', () => deleteDeveloperKey())

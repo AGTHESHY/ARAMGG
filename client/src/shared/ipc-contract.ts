@@ -468,6 +468,22 @@ export interface PartySkinsResult extends OperationResult {
   members?: PartyMemberSkin[]
 }
 
+export interface SkinRuntimeSelection {
+  championId: number
+  championName: string
+  skinId: number
+  skinName: string
+}
+
+export interface SkinRuntimeState extends LooseRecord {
+  supported: boolean
+  phase: 'unsupported' | 'missing-dependency' | 'idle' | 'downloading' | 'prepared' | 'applying' | 'active' | 'error'
+  progress: number
+  message: string
+  selection: SkinRuntimeSelection | null
+  dependencyDirectory: string
+}
+
 export interface ElectronEventMap {
   fromMain: [payload?: unknown]
   'for-popup': [payload: OverlayPayload]
@@ -494,6 +510,7 @@ export interface ElectronEventMap {
   'teammate-winrate-updated': [payload: TeammateWinratePayload]
   'lobby-stats-updated': [payload: LobbyStatsPayload]
   'bench-swap-result': [payload: BenchSwapResult]
+  'skin-runtime-changed': [payload: SkinRuntimeState]
 }
 
 export type ElectronEventChannel = keyof ElectronEventMap
@@ -569,6 +586,12 @@ export interface ElectronAPI {
   matchHistory: {
     getLocalSummary(): Promise<LocalMatchHistorySummaryResult>
     queryCurrent(payload?: HextechAramMatchHistoryQuery): Promise<HextechAramMatchHistoryQueryResult>
+  }
+  skinRuntime: {
+    getState(): Promise<SkinRuntimeState>
+    prepare(selection: SkinRuntimeSelection): Promise<SkinRuntimeState>
+    clear(): Promise<SkinRuntimeState>
+    importDll(): Promise<OperationResult & { data?: SkinRuntimeState }>
   }
   lcu: {
     getChampionMonitorState(): Promise<ChampionMonitorState>

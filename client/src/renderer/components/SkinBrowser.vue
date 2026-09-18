@@ -21,6 +21,24 @@
     <div v-if="selectStatus" class="select-status" :class="{ success: selectStatus.includes('已设置') }">
       {{ selectStatus }}
     </div>
+    <div v-if="runtimeState" class="runtime-status" :class="runtimeState.phase">
+      <div>
+        <strong>本地替换：</strong>{{ runtimeState.message }}
+        <span v-if="runtimeState.phase === 'downloading'">（{{ runtimeState.progress }}%）</span>
+      </div>
+      <button
+        v-if="runtimeState.supported && runtimeState.phase === 'missing-dependency'"
+        class="runtime-action"
+        type="button"
+        @click="importRuntimeDll"
+      >导入 cslol-dll.dll</button>
+      <button
+        v-if="runtimeState.selection"
+        class="runtime-action secondary"
+        type="button"
+        @click="clearLocalSkin"
+      >取消本地替换</button>
+    </div>
 
     <!-- Champion grid -->
     <div v-if="!selectedChampion" class="champion-section">
@@ -116,7 +134,15 @@
             >
               {{ selectingSkinId === skin.skinId ? '应用中...' : '选择此皮肤' }}
             </button>
-            <span v-else class="not-owned-label">未拥有</span>
+            <button
+              v-else
+              class="skin-select-button local"
+              type="button"
+              :disabled="selectingSkinId === skin.skinId || !runtimeState?.supported"
+              @click="selectLocalSkin(skin)"
+            >
+              {{ selectingSkinId === skin.skinId ? '准备中...' : runtimeState?.supported ? '本地替换' : '仅 Windows 可用' }}
+            </button>
           </div>
         </div>
       </div>
@@ -125,7 +151,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import type { SkinRuntimeState } from '../../shared/ipc-contract.ts'
 import { RefreshCw, ChevronLeft } from 'lucide-vue-next'
 import { electronAPI } from '../native/electron-api.ts'
 import { getChampionSquareIconUrl } from '../service/cdn'
@@ -170,6 +197,8 @@ const loadingSkins = ref(false)
 const error = ref('')
 const selectingSkinId = ref<number | null>(null)
 const selectStatus = ref('')
+const runtimeState = ref<SkinRuntimeState | null>(null)
+let unsubscribeRuntime: (() => void) | null = null
 
 const filteredChampions = computed(() => {
   if (!searchQuery.value.trim()) return champions.value
@@ -292,7 +321,34 @@ const selectSkin = async (skinId: number) => {
   }
 }
 
-onMounted(loadData)
+const selectLocalSkin = async (skin: SkinData) => {
+  if (!selectedChampion.value) return
+  selectingSkinId.value = skin.skinId
+  runtimeState.value = await electronAPI.skinRuntime.prepare({
+    championId: selectedChampion.value.id,
+    championName: selectedChampion.value.name,
+    skinId: skin.skinId,
+    skinName: skin.skinName || '默认皮肤',
+  })
+  selectingSkinId.value = null
+}
+
+const importRuntimeDll = async () => {
+  const result = await electronAPI.skinRuntime.importDll()
+  if (result.data) runtimeState.value = result.data
+  else if (result.error && result.error !== '已取消导入') selectStatus.value = result.error
+}
+
+const clearLocalSkin = async () => {
+  runtimeState.value = await electronAPI.skinRuntime.clear()
+}
+
+onMounted(async () => {
+  await loadData()
+  runtimeState.value = await electronAPI.skinRuntime.getState()
+  unsubscribeRuntime = electronAPI.events.on('skin-runtime-changed', value => { runtimeState.value = value })
+})
+onUnmounted(() => unsubscribeRuntime?.())
 </script>
 
 <style scoped>
@@ -373,6 +429,23 @@ onMounted(loadData)
   border: 1px solid rgba(226, 195, 132, 0.2);
   border-radius: 2px;
 }
+
+.runtime-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  font-size: 12px;
+  color: #9eb0bd;
+  background: rgba(30, 53, 66, 0.55);
+  border: 1px solid rgba(126, 157, 176, 0.22);
+}
+
+.runtime-status.error, .runtime-status.missing-dependency { color: #e8b16f; border-color: rgba(232, 177, 111, .35); }
+.runtime-status.active, .runtime-status.prepared { color: #6fce8f; border-color: rgba(111, 206, 143, .3); }
+.runtime-action { margin-left: auto; border: 1px solid rgba(226,195,132,.4); background: #142531; color: #e6c58e; padding: 5px 9px; cursor: pointer; }
+.runtime-action.secondary { margin-left: 0; color: #9eb0bd; }
+.skin-select-button.local { border-color: rgba(114, 172, 211, .45); color: #94c9eb; }
 
 .select-status.success {
   color: #6fce8f;

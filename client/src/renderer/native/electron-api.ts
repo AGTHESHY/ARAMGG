@@ -84,6 +84,12 @@ export const electronAPI: ElectronAPI = {
     getLocalSummary: (...args) => requireElectronAPI().matchHistory.getLocalSummary(...args),
     queryCurrent: (...args) => requireElectronAPI().matchHistory.queryCurrent(...args),
   },
+  skinRuntime: {
+    getState: (...args) => requireElectronAPI().skinRuntime.getState(...args),
+    prepare: (...args) => requireElectronAPI().skinRuntime.prepare(...args),
+    clear: (...args) => requireElectronAPI().skinRuntime.clear(...args),
+    importDll: (...args) => requireElectronAPI().skinRuntime.importDll(...args),
+  },
   lcu: {
     getChampionMonitorState: () => requireElectronAPI().lcu.getChampionMonitorState(),
     getChampionId: (...args) => requireElectronAPI().lcu.getChampionId(...args),

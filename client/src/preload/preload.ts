@@ -31,6 +31,7 @@ const validEvents = new Set<ElectronEventChannel>([
   'teammate-winrate-updated',
   'lobby-stats-updated',
   'bench-swap-result',
+  'skin-runtime-changed',
 ])
 
 function assertValidEvent(channel: string): asserts channel is ElectronEventChannel {
@@ -134,6 +135,12 @@ const electronAPI: ElectronAPI = {
   matchHistory: {
     getLocalSummary: () => ipcRenderer.invoke('match-history-get-local-summary'),
     queryCurrent: (payload) => ipcRenderer.invoke('match-history-query-current', payload),
+  },
+  skinRuntime: {
+    getState: () => ipcRenderer.invoke('skin-runtime-get-state'),
+    prepare: (selection) => ipcRenderer.invoke('skin-runtime-prepare', selection),
+    clear: () => ipcRenderer.invoke('skin-runtime-clear'),
+    importDll: () => ipcRenderer.invoke('skin-runtime-import-dll'),
   },
   lcu: {
     getChampionMonitorState: () => ipcRenderer.invoke('lcu-get-champion-monitor-state'),
