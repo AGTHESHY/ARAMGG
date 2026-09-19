@@ -1,0 +1,8 @@
+{
+  "name": "sona-aramgg",
+  "version": "1.9.1",
+  "type": "module",
+  "description": "Sona · ARAMGG 内置版 - 大厅与选人阶段战绩注入",
+  "main": "index.js",
+  "license": "AGPL-3.0"
+}

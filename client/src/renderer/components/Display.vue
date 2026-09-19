@@ -103,10 +103,21 @@
                             />
                         </div>
 
-                        <!-- 战绩中心 -->
-                        <div v-if="activeNav === 'match-history'" class="nav-section">
-                            <MatchHistoryPanel />
-                            <MatchPreferences />
+                        <!-- 皮肤中心 -->
+                        <div v-if="activeNav === 'skin-center'" class="nav-section">
+                            <SkinCenter />
+                        </div>
+
+                        <!-- Pengu Loader -->
+                        <div v-if="activeNav === 'pengu-loader'" class="nav-section">
+                            <PenguLoaderPage />
+                        </div>
+
+                        <!-- 用户中心 -->
+                        <div v-if="activeNav === 'user-center'" class="nav-section">
+                            <AccountAndSharing />
+
+                            <!-- 赛后海报 -->
                             <section class="post-game-panel">
                                 <div class="section-header">
                                     <p class="section-kicker">{{ t('display.postGamePoster') }}</p>
@@ -124,16 +135,6 @@
                                     </span>
                                 </button>
                             </section>
-                        </div>
-
-                        <!-- 皮肤中心 -->
-                        <div v-if="activeNav === 'skin-center'" class="nav-section">
-                            <SkinCenter />
-                        </div>
-
-                        <!-- 用户中心 -->
-                        <div v-if="activeNav === 'user-center'" class="nav-section">
-                            <AccountAndSharing />
                         </div>
 
                         <!-- 设置 -->
@@ -426,11 +427,10 @@ import ItemSetInstaller from './ItemSetInstaller.vue'
 import AccountAndSharing from './AccountAndSharing.vue'
 import OverlayPreferences from './OverlayPreferences.vue'
 import ChampionMonitor from './ChampionMonitor.vue'
-import MatchHistoryPanel from './MatchHistoryPanel.vue'
-import MatchPreferences from './MatchPreferences.vue'
 import SkinCenter from './SkinCenter.vue'
 import LobbyStatsPanel from './LobbyStatsPanel.vue'
 import PenguPluginPanel from './PenguPluginPanel.vue'
+import PenguLoaderPage from './PenguLoaderPage.vue'
 import PostGameShareModal from './PostGameShareModal.vue'
 import {
     Select,
@@ -467,7 +467,9 @@ import {
     Trash2,
     TrendingUp,
     User,
+    Users,
     X,
+    Zap,
 } from 'lucide-vue-next'
 
 const testStatus = ref(null)
@@ -496,8 +498,8 @@ const lcuConnected = ref(false)
 
 const navItems = [
     { id: 'aram-tools', label: '大乱斗工具', icon: markRaw(Swords) },
-    { id: 'match-history', label: '战绩中心', icon: markRaw(TrendingUp) },
     { id: 'skin-center', label: '皮肤中心', icon: markRaw(Shirt) },
+    { id: 'pengu-loader', label: 'Pengu Loader', icon: markRaw(Zap) },
     { id: 'user-center', label: '用户中心', icon: markRaw(User) },
     { id: 'settings', label: '设置', icon: markRaw(Settings) },
 ]

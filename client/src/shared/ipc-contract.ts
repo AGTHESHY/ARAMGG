@@ -642,11 +642,20 @@ export interface ElectronAPI {
     deleteMod(filename: string): Promise<OperationResult>
   }
   penguPlugin: {
-    getStatus(): Promise<OperationResult & { data?: { penguInstalled: boolean; pluginInstalled: boolean; pluginPath?: string; penguPath?: string } }>
+    getStatus(): Promise<OperationResult & { data?: { penguInstalled: boolean; penguBundled?: boolean; pluginInstalled: boolean; oldPluginInstalled?: boolean; pluginPath?: string; penguPath?: string } }>
     installPlugin(): Promise<OperationResult & { data?: { pluginPath: string } }>
     uninstallPlugin(): Promise<OperationResult>
     openPluginsFolder(): Promise<OperationResult>
     writeSettings(settings: LooseRecord): Promise<OperationResult>
+    getInjection(): Promise<OperationResult & { data?: { active: boolean; installed: boolean } }>
+    enableInjection(): Promise<OperationResult>
+    disableInjection(): Promise<OperationResult>
+    getPlugins(): Promise<OperationResult & { data?: LooseRecord[] }>
+    togglePlugin(hash: number): Promise<OperationResult & { data?: { enabled: boolean } }>
+    getConfig(): Promise<OperationResult & { data?: LooseRecord }>
+    setConfig(section: string, key: string, value: unknown): Promise<OperationResult>
+    detectLeague(): Promise<OperationResult & { data?: { leaguePath: string } }>
+    restartClient(): Promise<OperationResult>
   }
   lcu: {
     getChampionMonitorState(): Promise<ChampionMonitorState>

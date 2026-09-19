@@ -1,0 +1,10 @@
+feat: 集成PenguLoader核心功能，移除独立exe依赖
+
+- 后端：INI配置读写、插件扫描与元数据解析、插件启用/禁用管理
+- 后端：IFEO注册表直接操作（PowerShell提权），绕过Pengu Loader.exe
+- 后端：League客户端路径自动检测、客户端重启功能
+- 前端：PenguLoaderPage新增Plugins页签（插件列表+checkbox）和Loader页签（设置项）
+- 前端：注入成功后自动重启客户端
+- 清理：移除Pengu Loader.exe（7.5MB Tauri版），仅保留core.dll（454KB）
+- 清理：移除旧aramgg-stats插件资源、MatchPreferences.vue
+- IPC：新增getPlugins/togglePlugin/getConfig/setConfig/detectLeague/restartClient接口
