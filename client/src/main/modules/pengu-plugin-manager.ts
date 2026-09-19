@@ -4,8 +4,8 @@ import * as path from 'node:path'
 import { spawn } from 'node:child_process'
 import { logger } from './logger'
 
-const PLUGIN_DIR_NAME = 'sona-aramgg'
-const OLD_PLUGIN_DIR_NAME = 'aramgg-stats'
+const PLUGIN_DIR_NAME = 'sona'
+const OLD_PLUGIN_DIR_NAMES = ['aramgg-stats', 'sona-aramgg']
 const PLUGIN_ENTRY = 'index.js'
 
 // ==================== 路径解析 ====================
@@ -150,8 +150,9 @@ export async function getPenguPluginStatus() {
     const pluginsDir = penguPath ? path.join(penguPath, 'plugins') : null
     const pluginPath = pluginsDir ? path.join(pluginsDir, PLUGIN_DIR_NAME, PLUGIN_ENTRY) : null
     const pluginInstalled = pluginPath ? fs.existsSync(pluginPath) : false
-    const oldPluginPath = pluginsDir ? path.join(pluginsDir, OLD_PLUGIN_DIR_NAME, PLUGIN_ENTRY) : null
-    const oldPluginInstalled = oldPluginPath ? fs.existsSync(oldPluginPath) : false
+    const oldPluginInstalled = pluginsDir
+      ? OLD_PLUGIN_DIR_NAMES.some(oldName => fs.existsSync(path.join(pluginsDir, oldName, PLUGIN_ENTRY)))
+      : false
 
     return {
       success: true,
@@ -161,7 +162,6 @@ export async function getPenguPluginStatus() {
         pluginInstalled,
         oldPluginInstalled,
         pluginPath: pluginPath ?? undefined,
-        oldPluginPath: oldPluginPath ?? undefined,
         penguPath: penguPath ?? undefined,
       },
     }
@@ -195,6 +195,15 @@ export async function installPenguPlugin() {
     // 清理旧安装
     if (fs.existsSync(targetDir)) {
       fs.rmSync(targetDir, { recursive: true, force: true })
+    }
+
+    // 清理旧版插件目录名
+    for (const oldName of OLD_PLUGIN_DIR_NAMES) {
+      const oldDir = path.join(pluginsDir, oldName)
+      if (fs.existsSync(oldDir)) {
+        fs.rmSync(oldDir, { recursive: true, force: true })
+        logger.info('[PenguPlugin] Cleaned up old plugin dir:', oldDir)
+      }
     }
 
     // 复制整个插件目录（包含 index.js + package.json）

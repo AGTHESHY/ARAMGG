@@ -1,7 +1,0 @@
-{
-  "name": "aramgg-stats",
-  "version": "2.0.0",
-  "type": "module",
-  "description": "ARAMGG Stats - 将战绩注入英雄联盟客户端",
-  "main": "index.js"
-}

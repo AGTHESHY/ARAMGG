@@ -30,7 +30,6 @@ const validEvents = new Set<ElectronEventChannel>([
   'match-history-updated',
   'teammate-winrate-updated',
   'lobby-stats-updated',
-  'bench-swap-result',
   'skin-runtime-changed',
 ])
 
@@ -140,7 +139,8 @@ const electronAPI: ElectronAPI = {
     getState: () => ipcRenderer.invoke('skin-runtime-get-state'),
     prepare: (selection) => ipcRenderer.invoke('skin-runtime-prepare', selection),
     clear: () => ipcRenderer.invoke('skin-runtime-clear'),
-    importDll: () => ipcRenderer.invoke('skin-runtime-import-dll'),
+    downloadRepo: () => ipcRenderer.invoke('skin-runtime-download-repo'),
+    getRepoStatus: () => ipcRenderer.invoke('skin-runtime-repo-status'),
     scanLocalMods: () => ipcRenderer.invoke('skin-runtime-scan-local-mods'),
     toggleMod: (filename, enabled) => ipcRenderer.invoke('skin-runtime-toggle-mod', filename, enabled),
     deleteMod: (filename) => ipcRenderer.invoke('skin-runtime-delete-mod', filename),
@@ -176,7 +176,7 @@ const electronAPI: ElectronAPI = {
     validateManualLeaguePath: (lolPath) => ipcRenderer.invoke('lcu-validate-manual-league-path', lolPath),
     setManualLeaguePath: (lolPath) => ipcRenderer.invoke('lcu-set-manual-league-path', lolPath),
     clearManualLeaguePath: () => ipcRenderer.invoke('lcu-clear-manual-league-path'),
-    benchSwap: (championId) => ipcRenderer.invoke('lcu-bench-swap', championId),
+
     getLobbyStats: () => ipcRenderer.invoke('lcu-get-lobby-stats'),
     getOwnedSkins: () => ipcRenderer.invoke('lcu-get-owned-skins'),
     getChampionList: () => ipcRenderer.invoke('lcu-get-champion-list'),

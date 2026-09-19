@@ -1,0 +1,187 @@
+/* Sona About Page */
+
+.sona-about {
+  padding: 32px;
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.sona-about::-webkit-scrollbar { width: 6px; }
+.sona-about::-webkit-scrollbar-thumb {
+  background: rgba(200, 170, 110, 0.2);
+  border-radius: 3px;
+}
+
+.sona-about-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.sona-about-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  color: #c8aa6e;
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(200, 170, 110, 0.3);
+}
+
+.sona-about-version {
+  font-size: 13px;
+  color: #785a28;
+  font-weight: 600;
+}
+
+.sona-about-desc {
+  margin: 0 0 24px 0;
+  font-size: 13px;
+  color: #a09b8c;
+  line-height: 1.7;
+}
+
+/* ---- 并排行：卡片 + 技术栈 ---- */
+.sona-about-row {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+/* ---- 信息卡片（左半） ---- */
+.sona-about-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---- 技术栈（右半） ---- */
+.sona-about-tech {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+/* ---- Hex Card (InfoCard) ---- */
+.sona-hex-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, rgba(200, 170, 110, 0.08) 0%, rgba(30, 35, 40, 0.6) 100%);
+  border: 1px solid rgba(200, 170, 110, 0.15);
+  transition: border-color 0.3s ease, background 0.3s ease, transform 0.3s ease;
+}
+
+.sona-hex-card:hover {
+  border-color: rgba(200, 170, 110, 0.35);
+  background: linear-gradient(135deg, rgba(200, 170, 110, 0.12) 0%, rgba(30, 35, 40, 0.7) 100%);
+  transform: translateX(4px);
+}
+
+.sona-hex-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  color: #c8aa6e;
+  opacity: 0.8;
+}
+
+.sona-hex-card-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.sona-hex-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sona-hex-card-label {
+  font-size: 11px;
+  color: #785a28;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.sona-hex-card-value {
+  font-size: 14px;
+  color: #f0e6d2;
+  font-weight: 500;
+}
+
+/* ---- 可点击链接卡片 ---- */
+.sona-hex-card-link {
+  margin-top: 12px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.sona-hex-card-link:hover .sona-hex-card-value {
+  color: #c8aa6e;
+}
+
+/* ---- Section ---- */
+.sona-about-section {
+  margin-bottom: 24px;
+}
+
+.sona-about-section-title {
+  margin: 0 0 10px 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #c8aa6e;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(200, 170, 110, 0.2);
+}
+
+.sona-about-list {
+  margin: 0;
+  padding: 0 0 0 18px;
+  list-style: none;
+}
+
+.sona-about-list li {
+  position: relative;
+  font-size: 13px;
+  color: #a09b8c;
+  line-height: 2;
+  padding-left: 4px;
+}
+
+.sona-about-list li::before {
+  content: '◆';
+  position: absolute;
+  left: -16px;
+  color: #785a28;
+  font-size: 8px;
+  top: 1px;
+}
+
+.sona-about-text {
+  margin: 0;
+  font-size: 13px;
+  color: #a09b8c;
+}
+
+.sona-about-quote {
+  margin-top: auto;
+  padding-top: 24px;
+  font-size: 12px;
+  color: #c8aa6e;
+  font-style: italic;
+  opacity: 0.7;
+  border-top: 1px solid rgba(200, 170, 110, 0.1);
+  line-height: 1.6;
+}

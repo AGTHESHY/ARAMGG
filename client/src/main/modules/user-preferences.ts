@@ -9,7 +9,6 @@ export const USER_PREFERENCE_KEYS = {
     showTeammateWinrate: 'teammateWinrate.enabled',
     showLobbyStats: 'lobbyStats.enabled',
     showTeammateParticleEffects: 'teammateWinrate.particleEffects',
-    showAramBenchSwap: 'aramBenchSwap.enabled',
 }
 
 export function getBooleanPreference(key: string, defaultValue = true): boolean {
@@ -51,8 +50,4 @@ export function shouldShowLobbyStats(): boolean {
 
 export function shouldShowTeammateParticleEffects(): boolean {
     return getBooleanPreference(USER_PREFERENCE_KEYS.showTeammateParticleEffects, true)
-}
-
-export function shouldShowAramBenchSwap(): boolean {
-    return getBooleanPreference(USER_PREFERENCE_KEYS.showAramBenchSwap, true)
 }

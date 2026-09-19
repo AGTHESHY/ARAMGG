@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { spawn, type ChildProcess } from 'child_process'
 import { createWriteStream } from 'fs'
-import { access, cp, mkdir, readdir, rename, rm, stat } from 'fs/promises'
+import { access, cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'fs/promises'
 import https from 'https'
 import path from 'path'
 import { createRequire } from 'module'
@@ -118,18 +118,11 @@ function packagedToolsDirectory(): string {
 
 async function ensurePublicTools(): Promise<void> {
   await mkdir(toolsDirectory(), { recursive: true })
-  const source = path.join(packagedToolsDirectory(), 'mod-tools.exe')
-  const destination = path.join(toolsDirectory(), 'mod-tools.exe')
-  if (!(await exists(destination)) && await exists(source)) await cp(source, destination)
-}
-
-export async function installSkinRuntimeDll(source: string): Promise<SkinRuntimeState> {
-  if (!state.supported) return getSkinRuntimeState()
-  if (!source || path.basename(source).toLowerCase() !== 'cslol-dll.dll') throw new Error('请选择名为 cslol-dll.dll 的文件')
-  await ensurePublicTools()
-  await cp(source, path.join(toolsDirectory(), 'cslol-dll.dll'))
-  setState({ phase: 'idle', message: '运行依赖已导入，可以准备本地皮肤' })
-  return getSkinRuntimeState()
+  for (const name of ['mod-tools.exe', 'cslol-dll.dll']) {
+    const source = path.join(packagedToolsDirectory(), name)
+    const destination = path.join(toolsDirectory(), name)
+    if (!(await exists(destination)) && await exists(source)) await cp(source, destination)
+  }
 }
 
 async function ensureDependencies(): Promise<void> {
@@ -145,11 +138,150 @@ async function ensureDependencies(): Promise<void> {
 }
 
 function skinArchivePath(selection: SkinRuntimeSelection): string {
-  return path.join(runtimeRoot(), 'skins', String(selection.championId), String(selection.skinId), `${selection.skinId}.fantome`)
+  const skinsDir = path.join(runtimeRoot(), 'skins')
+  if (selection.chromaId) {
+    return path.join(skinsDir, String(selection.championId), String(selection.skinId), String(selection.chromaId), `${selection.chromaId}.fantome`)
+  }
+  return path.join(skinsDir, String(selection.championId), String(selection.skinId), `${selection.skinId}.fantome`)
+}
+
+function skinPreviewPath(selection: SkinRuntimeSelection): string {
+  const skinsDir = path.join(runtimeRoot(), 'skins')
+  if (selection.chromaId) {
+    return path.join(skinsDir, String(selection.championId), String(selection.skinId), String(selection.chromaId), `${selection.chromaId}.png`)
+  }
+  return path.join(skinsDir, String(selection.championId), String(selection.skinId), `${selection.skinId}.png`)
 }
 
 function downloadUrl(selection: SkinRuntimeSelection): string {
+  if (selection.chromaId) {
+    return `https://raw.githubusercontent.com/Alban1911/LeagueSkins/main/skins/${selection.championId}/${selection.skinId}/${selection.chromaId}/${selection.chromaId}.fantome`
+  }
   return `https://raw.githubusercontent.com/Alban1911/LeagueSkins/main/skins/${selection.championId}/${selection.skinId}/${selection.skinId}.fantome`
+}
+
+const SKIN_REPO_ZIP_URL = 'https://github.com/Alban1911/LeagueSkins/archive/refs/heads/main.zip'
+const SKIN_REPO_API = 'https://api.github.com/repos/Alban1911/LeagueSkins'
+const VERSION_FILE = '.skin_version'
+
+async function getLocalSkinVersion(): Promise<string | null> {
+  const versionFile = path.join(runtimeRoot(), 'skins', VERSION_FILE)
+  try {
+    return (await readFile(versionFile, 'utf-8')).trim()
+  } catch {
+    return null
+  }
+}
+
+async function getRemoteSkinVersion(): Promise<string | null> {
+  return new Promise((resolve) => {
+    const req = https.get(`${SKIN_REPO_API}/commits/main`, {
+      headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'ARAMGG' },
+      timeout: 10000,
+    }, (response) => {
+      let data = ''
+      response.on('data', chunk => { data += chunk })
+      response.on('end', () => {
+        try {
+          const json = JSON.parse(data)
+          resolve(json.sha || null)
+        } catch { resolve(null) }
+      })
+    })
+    req.on('error', () => resolve(null))
+    req.on('timeout', () => { req.destroy(); resolve(null) })
+  })
+}
+
+export async function hasSkinRepoChanged(): Promise<boolean> {
+  const local = await getLocalSkinVersion()
+  if (!local) return true
+  const remote = await getRemoteSkinVersion()
+  if (!remote) return false
+  return local !== remote
+}
+
+async function downloadRepoZipWithRedirect(url: string, tempZip: string, onProgress?: (progress: number, message: string) => void, redirects = 0): Promise<void> {
+  if (redirects > 5) throw new Error('皮肤仓库重定向次数过多')
+  const received = await stat(tempZip).then(v => v.size).catch(() => 0)
+  await new Promise<void>((resolve, reject) => {
+    const request = https.get(url, {
+      headers: received ? { Range: `bytes=${received}-` } : {},
+      timeout: 300000,
+    }, (response) => {
+      if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        response.resume()
+        const redirectUrl = new URL(response.headers.location, url).toString()
+        downloadRepoZipWithRedirect(redirectUrl, tempZip, onProgress, redirects + 1).then(resolve, reject)
+        return
+      }
+      if (response.statusCode !== 200 && response.statusCode !== 206) {
+        response.resume()
+        reject(new Error(`下载皮肤仓库失败（HTTP ${response.statusCode}）`))
+        return
+      }
+      const append = response.statusCode === 206 && received > 0
+      const total = Number(response.headers['content-length'] || 0) + (append ? received : 0)
+      let current = append ? received : 0
+      const output = createWriteStream(tempZip, { flags: append ? 'a' : 'w' })
+      response.on('data', chunk => {
+        current += chunk.length
+        if (total > 0) onProgress?.(Math.min(95, Math.round(current / total * 100)), `正在下载皮肤仓库… ${Math.round(current / total * 100)}%`)
+      })
+      response.pipe(output)
+      output.on('finish', () => output.close(() => resolve()))
+      output.on('error', reject)
+    })
+    request.on('error', reject)
+    request.on('timeout', () => { request.destroy(); reject(new Error('下载皮肤仓库超时')) })
+  })
+}
+
+export async function downloadSkinsRepo(onProgress?: (progress: number, message: string) => void): Promise<boolean> {
+  if (!state.supported) return false
+  const skinsDir = path.join(runtimeRoot(), 'skins')
+  await mkdir(skinsDir, { recursive: true })
+
+  const remoteSha = await getRemoteSkinVersion()
+  const localSha = await getLocalSkinVersion()
+  if (remoteSha && localSha === remoteSha) {
+    onProgress?.(100, '皮肤仓库已是最新')
+    return true
+  }
+
+  onProgress?.(0, '正在下载皮肤仓库…')
+  const tempZip = path.join(runtimeRoot(), 'skins-repo.zip')
+  await downloadRepoZipWithRedirect(SKIN_REPO_ZIP_URL, tempZip, onProgress)
+
+  onProgress?.(95, '正在解压皮肤文件…')
+  const zip = new AdmZip(tempZip)
+  const entries = zip.getEntries()
+  const skinsPrefix = 'LeagueSkins-main/skins/'
+  const resourcesPrefix = 'LeagueSkins-main/resources/'
+
+  for (const entry of entries) {
+    if (entry.entryName.startsWith(skinsPrefix) && !entry.entryName.endsWith('/')) {
+      const relativePath = entry.entryName.replace(skinsPrefix, '')
+      const targetPath = path.join(skinsDir, relativePath)
+      await mkdir(path.dirname(targetPath), { recursive: true })
+      await writeFile(targetPath, entry.getData())
+    } else if (entry.entryName.startsWith(resourcesPrefix) && !entry.entryName.endsWith('/')) {
+      const relativePath = entry.entryName.replace(resourcesPrefix, '')
+      const resourcesDir = path.join(runtimeRoot(), 'resources')
+      const targetPath = path.join(resourcesDir, relativePath)
+      await mkdir(path.dirname(targetPath), { recursive: true })
+      await writeFile(targetPath, entry.getData())
+    }
+  }
+
+  if (remoteSha) {
+    const versionFile = path.join(skinsDir, VERSION_FILE)
+    await writeFile(versionFile, remoteSha, 'utf-8')
+  }
+
+  await rm(tempZip, { force: true })
+  onProgress?.(100, '皮肤仓库下载完成')
+  return true
 }
 
 async function downloadWithResume(url: string, destination: string, generation: number, redirects = 0): Promise<void> {

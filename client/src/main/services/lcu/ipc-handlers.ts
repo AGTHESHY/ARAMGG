@@ -324,16 +324,6 @@ export function registerLCUIpcHandlers(): void {
     }
   })
 
-  ipcMain.handle('lcu-bench-swap', async (_event, championId: number) => {
-    const { service, error } = await getLcuServiceFromStore()
-    if (!service) {
-      return { success: false, error, championId }
-    }
-
-    const success = await service.benchSwap(championId)
-    return { success, championId, error: success ? null : '换英雄失败' }
-  })
-
   ipcMain.handle('lcu-get-lobby-stats', async () => {
     const { service, error } = await getLcuServiceFromStore()
     if (!service) {

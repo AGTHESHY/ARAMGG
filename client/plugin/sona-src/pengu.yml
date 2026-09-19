@@ -1,0 +1,15 @@
+id: sona
+name: Sona
+description: Client enhancement suite — champion select tools, OP.GG builds, match history and beautification.
+version: $package.version
+
+repo: https://github.com/AGTHESHY/ARAMGG
+
+author:
+  name: 等一瞥惊鸿
+  github: AGTHESHY
+
+tags: [utility, ui, champ-select]
+
+install:
+  release: "sona-*.zip"

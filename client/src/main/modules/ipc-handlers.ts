@@ -49,13 +49,16 @@ import { trustedIpcMain as ipcMain } from '../security/trusted-ipc.ts'
 import { registerPenguPluginIpcHandlers } from './pengu-plugin-manager.ts'
 import {
     clearPreparedSkin,
-    installSkinRuntimeDll,
+    downloadSkinsRepo,
+    getSkinRuntimeState,
+    hasSkinRepoChanged,
     prepareSkin,
     refreshSkinRuntimeState,
     scanLocalMods,
     toggleLocalMod,
     deleteLocalMod,
 } from '../services/skin-runtime/skin-runtime-service.ts'
+import type { SkinRuntimeState } from '../../shared/ipc-contract.ts'
 import { shouldRaiseOverlayWindow } from './overlay-window-state.ts'
 import { deleteDeveloperKey, getDeveloperKeyStatus, saveDeveloperKey } from '../services/developer-key-service.ts'
 import {
@@ -382,17 +385,31 @@ export function registerIpcHandlers(isDev: boolean): void {
     ipcMain.handle('skin-runtime-get-state', () => refreshSkinRuntimeState())
     ipcMain.handle('skin-runtime-prepare', (_event, selection) => prepareSkin(selection))
     ipcMain.handle('skin-runtime-clear', () => clearPreparedSkin())
-    ipcMain.handle('skin-runtime-import-dll', async () => {
-        const result = await dialog.showOpenDialog({
-            title: '导入本地替换运行依赖',
-            properties: ['openFile'],
-            filters: [{ name: 'CSLOL runtime', extensions: ['dll'] }],
-        })
-        if (result.canceled || !result.filePaths[0]) return { success: false, error: '已取消导入' }
+    ipcMain.handle('skin-runtime-download-repo', async () => {
         try {
-            return { success: true, data: await installSkinRuntimeDll(result.filePaths[0]) }
+            const changed = await hasSkinRepoChanged()
+            if (!changed) return { success: true, upToDate: true }
+            const ok = await downloadSkinsRepo((progress, message) => {
+                for (const window of BrowserWindow.getAllWindows()) {
+                    if (!window.isDestroyed()) window.webContents.send('skin-runtime-changed', {
+                        ...getSkinRuntimeState(),
+                        phase: 'downloading',
+                        progress,
+                        message,
+                    } as SkinRuntimeState)
+                }
+            })
+            return { success: ok, upToDate: false }
         } catch (error) {
-            return { success: false, error: error instanceof Error ? error.message : String(error) }
+            return { success: false, error: getErrorMessage(error) }
+        }
+    })
+    ipcMain.handle('skin-runtime-repo-status', async () => {
+        try {
+            const changed = await hasSkinRepoChanged()
+            return { success: true, hasUpdate: changed }
+        } catch {
+            return { success: true, hasUpdate: true }
         }
     })
     ipcMain.handle('skin-runtime-scan-local-mods', async () => {

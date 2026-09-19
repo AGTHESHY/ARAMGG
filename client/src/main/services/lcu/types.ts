@@ -31,7 +31,6 @@ export interface LCUUrls {
   gameflowPhase: string
   gameflowSession: string
   lobby: string
-  benchSwap: string
   ownedSkins: string
   championData: string
   ownedChampions: string

@@ -1,0 +1,8 @@
+{
+  "name": "sona",
+  "version": "1.9.1",
+  "type": "module",
+  "description": "基于 Pengu Loader 的全服可用英雄联盟客户端增强插件",
+  "main": "index.js",
+  "license": "AGPL-3.0"
+}

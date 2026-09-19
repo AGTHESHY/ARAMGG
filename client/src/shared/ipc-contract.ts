@@ -14,7 +14,6 @@ export type AppStoreKey =
   | 'teammateWinrate.enabled'
   | 'teammateWinrate.particleEffects'
   | 'lobbyStats.enabled'
-  | 'aramBenchSwap.enabled'
   | 'skinMods.directory'
   | 'skinMemory'
   | 'skinHistory'
@@ -396,10 +395,6 @@ export interface LobbyStatsPayload {
   updatedAt: number
 }
 
-export interface BenchSwapResult extends OperationResult {
-  championId?: number
-}
-
 export interface SkinChromaData {
   id: number
   name: string
@@ -554,7 +549,6 @@ export interface ElectronEventMap {
   'match-history-updated': [payload: MatchHistoryUpdatedPayload]
   'teammate-winrate-updated': [payload: TeammateWinratePayload]
   'lobby-stats-updated': [payload: LobbyStatsPayload]
-  'bench-swap-result': [payload: BenchSwapResult]
   'skin-runtime-changed': [payload: SkinRuntimeState]
 }
 
@@ -636,7 +630,8 @@ export interface ElectronAPI {
     getState(): Promise<SkinRuntimeState>
     prepare(selection: SkinRuntimeSelection): Promise<SkinRuntimeState>
     clear(): Promise<SkinRuntimeState>
-    importDll(): Promise<OperationResult & { data?: SkinRuntimeState }>
+    downloadRepo(): Promise<OperationResult & { upToDate?: boolean }>
+    getRepoStatus(): Promise<OperationResult & { hasUpdate?: boolean }>
     scanLocalMods(): Promise<ScanLocalModsResult>
     toggleMod(filename: string, enabled: boolean): Promise<OperationResult>
     deleteMod(filename: string): Promise<OperationResult>
@@ -672,7 +667,6 @@ export interface ElectronAPI {
     validateManualLeaguePath(lolPath: string): Promise<LooseRecord>
     setManualLeaguePath(lolPath: string): Promise<LooseRecord>
     clearManualLeaguePath(): Promise<LooseRecord>
-    benchSwap(championId: number): Promise<BenchSwapResult>
     getLobbyStats(): Promise<OperationResult & { data?: LobbyStatsPayload }>
     getOwnedSkins(): Promise<OwnedSkinsResult>
     getChampionList(): Promise<ChampionListResult>

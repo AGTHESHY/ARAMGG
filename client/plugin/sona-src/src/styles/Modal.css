@@ -1,0 +1,150 @@
+/* Sona Modal Styles */
+
+/* 入场动画 */
+@keyframes sona-modal-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes sona-modal-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* 退场动画 */
+@keyframes sona-modal-overlay-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+@keyframes sona-modal-dialog-out {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.92) translateY(12px);
+  }
+}
+
+/* 遮罩层 */
+.sona-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(2px);
+  animation: sona-modal-overlay-in 0.2s ease-out;
+  pointer-events: auto;
+}
+
+.sona-modal-overlay,
+.sona-modal-overlay * {
+  box-sizing: border-box;
+}
+
+/* 遮罩层退场 */
+.sona-modal-overlay.sona-modal-closing {
+  animation: sona-modal-overlay-out 0.2s ease-in forwards;
+  pointer-events: none;
+}
+
+/* 对话框容器 */
+.sona-modal-dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: rgba(1, 10, 19, 0.96);
+  border: 1px solid rgba(200, 170, 110, 0.35);
+  border-radius: 4px;
+  box-shadow:
+    0 0 20px rgba(200, 170, 110, 0.12),
+    0 0 60px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(200, 170, 110, 0.08);
+  overflow: hidden;
+  animation: sona-modal-dialog-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 95vw;
+  max-height: 92vh;
+}
+
+/* 粒子 Canvas 背景 — 覆盖整个 dialog */
+.sona-modal-particle-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 对话框退场 */
+.sona-modal-dialog.sona-modal-closing {
+  animation: sona-modal-dialog-out 0.2s ease-in forwards;
+}
+
+/* 顶部边框装饰线 */
+.sona-modal-dialog::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(200, 170, 110, 0.5),
+    transparent
+  );
+  z-index: 1;
+}
+
+/* 关闭按钮 — 悬浮右上角 */
+.sona-modal-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(1, 10, 19, 0.6);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: rgba(200, 170, 110, 0.5);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.sona-modal-close:hover {
+  color: #c8aa6e;
+  border-color: rgba(200, 170, 110, 0.3);
+  background: rgba(200, 170, 110, 0.12);
+}
+
+.sona-modal-close:active {
+  transform: scale(0.9);
+}
+
+/* Body — 占满整个 dialog */
+.sona-modal-body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  overflow: hidden;
+  padding: 0;
+  min-height: 0;
+}

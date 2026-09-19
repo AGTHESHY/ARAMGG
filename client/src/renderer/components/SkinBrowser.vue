@@ -27,11 +27,11 @@
         <span v-if="runtimeState.phase === 'downloading'">（{{ runtimeState.progress }}%）</span>
       </div>
       <button
-        v-if="runtimeState.supported && runtimeState.phase === 'missing-dependency'"
         class="runtime-action"
         type="button"
-        @click="importRuntimeDll"
-      >导入 cslol-dll.dll</button>
+        :disabled="downloadingRepo"
+        @click="downloadRepo"
+      >{{ downloadingRepo ? '下载中…' : repoUpToDate ? '更新皮肤库' : '下载皮肤库' }}</button>
       <button
         v-if="runtimeState.selection"
         class="runtime-action secondary"
@@ -160,7 +160,7 @@
               class="skin-select-button local"
               type="button"
               :disabled="selectingSkinId === skin.skinId || !runtimeState?.supported"
-              @click="selectLocalSkin(skin)"
+              @click="selectLocalSkin(skin, selectedChroma && selectedChroma.skinId === skin.skinId ? selectedChroma.chromaId : undefined)"
             >
               {{ selectingSkinId === skin.skinId ? '准备中...' : runtimeState?.supported ? '本地替换' : '仅 Windows 可用' }}
             </button>
@@ -222,6 +222,8 @@ const runtimeState = ref<SkinRuntimeState | null>(null)
 const skinMemory = ref<Record<number, SkinMemoryEntry>>({})
 const selectedChroma = ref<{ skinId: number; chromaId: number } | null>(null)
 const selectingChromaId = ref<number | null>(null)
+const downloadingRepo = ref(false)
+const repoUpToDate = ref(false)
 let unsubscribeRuntime: (() => void) | null = null
 let unsubscribeChampionMonitor: (() => void) | null = null
 
@@ -438,7 +440,7 @@ const selectChroma = async (skin: SkinData, chroma: ChromaData) => {
   }
 }
 
-const selectLocalSkin = async (skin: SkinData) => {
+const selectLocalSkin = async (skin: SkinData, chromaId?: number) => {
   if (!selectedChampion.value) return
   selectingSkinId.value = skin.skinId
   runtimeState.value = await electronAPI.skinRuntime.prepare({
@@ -446,15 +448,33 @@ const selectLocalSkin = async (skin: SkinData) => {
     championName: selectedChampion.value.name,
     skinId: skin.skinId,
     skinName: skin.skinName || '默认皮肤',
+    chromaId,
   })
   selectingSkinId.value = null
-  saveSkinMemory(skin)
+  saveSkinMemory(skin, chromaId)
 }
 
-const importRuntimeDll = async () => {
-  const result = await electronAPI.skinRuntime.importDll()
-  if (result.data) runtimeState.value = result.data
-  else if (result.error && result.error !== '已取消导入') selectStatus.value = result.error
+const downloadRepo = async () => {
+  if (downloadingRepo.value) return
+  downloadingRepo.value = true
+  selectStatus.value = ''
+  try {
+    const result = await electronAPI.skinRuntime.downloadRepo()
+    if (result.success) {
+      if (result.upToDate) {
+        selectStatus.value = '皮肤库已是最新版本'
+      } else {
+        selectStatus.value = '皮肤库下载完成，可以使用本地替换功能'
+      }
+      repoUpToDate.value = true
+    } else {
+      selectStatus.value = result.error || '下载皮肤库失败'
+    }
+  } catch {
+    selectStatus.value = '下载皮肤库失败'
+  } finally {
+    downloadingRepo.value = false
+  }
 }
 
 const clearLocalSkin = async () => {
@@ -495,6 +515,8 @@ onMounted(async () => {
   await autoSwitchToCurrentChampion()
 
   runtimeState.value = await electronAPI.skinRuntime.getState()
+  const repoStatus = await electronAPI.skinRuntime.getRepoStatus()
+  repoUpToDate.value = !repoStatus.hasUpdate
   unsubscribeRuntime = electronAPI.events.on('skin-runtime-changed', (value) => {
     runtimeState.value = value
   })

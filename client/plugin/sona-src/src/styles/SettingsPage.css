@@ -1,0 +1,923 @@
+/* Sona Settings Page */
+
+.sona-settings {
+  padding: 32px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.sona-settings::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sona-settings::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sona-settings::-webkit-scrollbar-thumb {
+  background: rgba(200, 170, 110, 0.2);
+  border-radius: 3px;
+}
+
+.sona-settings::-webkit-scrollbar-thumb:hover {
+  background: rgba(200, 170, 110, 0.35);
+}
+
+.sona-settings-title {
+  margin: 0 0 28px 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: #f0e6d2;
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(200, 170, 110, 0.2);
+}
+
+/* ---- 调试页按钮行 ---- */
+.sona-debug-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---- 调试输出区 ---- */
+.sona-debug-output {
+  margin-top: 20px;
+  padding: 16px;
+  background: rgba(1, 10, 19, 0.6);
+  border: 1px solid #3c2e16;
+  border-radius: 4px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.sona-debug-output::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sona-debug-output::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sona-debug-output::-webkit-scrollbar-thumb {
+  background: rgba(200, 170, 110, 0.2);
+  border-radius: 3px;
+}
+
+.sona-debug-output pre {
+  margin: 0;
+  font-size: 11px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: #a09b8c;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.6;
+}
+
+.sona-debug-image-preview {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(1, 10, 19, 0.45);
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  border-radius: 4px;
+}
+
+.sona-debug-image-meta {
+  margin-bottom: 10px;
+  color: #a09b8c;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.sona-debug-image-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  border: 1px solid rgba(120, 90, 40, 0.45);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.sona-asset-browser {
+  padding: 14px;
+  background: rgba(1, 10, 19, 0.35);
+  border: 1px solid rgba(200, 170, 110, 0.14);
+  border-radius: 4px;
+}
+
+.sona-asset-browser-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.sona-asset-browser-title {
+  color: #c8aa6e;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.sona-asset-browser-hint {
+  color: #785a28;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: right;
+}
+
+.sona-asset-browser-status {
+  margin: 0;
+  color: #a09b8c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sona-asset-path-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 360px;
+}
+
+.sona-asset-path-row .sona-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.sona-asset-path-row .sona-btn {
+  flex-shrink: 0;
+  min-width: 72px;
+  white-space: nowrap;
+}
+
+.sona-asset-empty {
+  margin: 10px 0 0;
+  color: #785a28;
+  font-size: 12px;
+}
+
+.sona-asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.sona-asset-card {
+  position: relative;
+  min-width: 0;
+  padding: 8px;
+  background: rgba(30, 35, 40, 0.4);
+  border: 1px solid rgba(200, 170, 110, 0.1);
+  border-radius: 4px;
+  cursor: grab;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.sona-asset-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(200, 170, 110, 0.28);
+  background: rgba(30, 35, 40, 0.58);
+}
+
+.sona-asset-card:active {
+  cursor: grabbing;
+}
+
+.sona-asset-card--error,
+.sona-asset-card--error:active {
+  cursor: default;
+  border-color: rgba(232, 64, 87, 0.38);
+}
+
+.sona-asset-card-preview {
+  position: relative;
+  height: 86px;
+}
+
+.sona-asset-card img,
+.sona-asset-card video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(120, 90, 40, 0.28);
+}
+
+.sona-asset-card--error img,
+.sona-asset-card--error video {
+  visibility: hidden;
+}
+
+.sona-asset-card-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 9px;
+  border: 1px solid rgba(232, 64, 87, 0.38);
+  background: rgba(14, 10, 14, 0.92);
+  color: #e84057;
+  text-align: center;
+  pointer-events: none;
+}
+
+.sona-asset-card-error strong {
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.sona-asset-card-error small {
+  color: #a09b8c;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.sona-asset-card span {
+  display: block;
+  margin-top: 8px;
+  color: #a09b8c;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sona-asset-card-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(200, 170, 110, 0.12);
+  border-radius: 3px;
+  background: rgba(1, 10, 19, 0.78);
+  color: #a09b8c;
+  line-height: 20px;
+  cursor: pointer;
+  opacity: 0;
+  z-index: 2;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.sona-asset-card:hover .sona-asset-card-remove {
+  opacity: 1;
+}
+
+.sona-asset-card-remove:hover {
+  background: rgba(190, 64, 64, 0.32);
+  border-color: rgba(190, 64, 64, 0.5);
+  color: #f0e6d2;
+}
+
+.sona-glass-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sona-name-effect-settings {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(330px, 1.4fr);
+  align-items: stretch;
+  gap: 16px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.sona-name-effect-colors {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sona-name-effect-preview-stage {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 92px;
+  padding: 12px 18px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(200, 170, 110, 0.09), transparent 62%),
+    rgba(1, 10, 19, 0.42);
+  border: 1px solid rgba(200, 170, 110, 0.22);
+  border-radius: 5px;
+}
+
+.sona-name-effect-preview {
+  display: inline-block;
+  max-width: 240px;
+  overflow: hidden;
+  color: transparent;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-size: 200% 100%;
+  background-repeat: repeat;
+  animation: sona-name-preview-water-flow 3.6s linear infinite;
+  will-change: background-position;
+}
+
+.sona-name-effect-colors {
+  justify-content: flex-start;
+}
+
+.sona-name-effect-controls {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.sona-name-effect-color {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 34px;
+  align-items: center;
+  gap: 5px 10px;
+  min-width: 0;
+  padding: 9px 10px;
+  background: rgba(1, 10, 19, 0.3);
+  border: 1px solid rgba(120, 90, 40, 0.2);
+  border-radius: 4px;
+  color: #a09b8c;
+  font-size: 13px;
+}
+
+.sona-name-effect-color > span {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sona-name-effect-color input[type="color"] {
+  width: 34px;
+  height: 28px;
+  padding: 1px;
+  border: 1px solid rgba(200, 170, 110, 0.35);
+  border-radius: 3px;
+  background: rgba(1, 10, 19, 0.72);
+  cursor: pointer;
+}
+
+.sona-name-effect-color code {
+  grid-column: 1 / -1;
+  color: #c8aa6e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@media (max-width: 620px) {
+  .sona-name-effect-settings {
+    grid-template-columns: 1fr;
+  }
+}
+
+@keyframes sona-name-preview-water-flow {
+  from { background-position: 200% center; }
+  to { background-position: 0% center; }
+}
+
+.sona-wallpaper-dropzone {
+  min-height: 180px;
+  padding: 14px;
+  background:
+    linear-gradient(135deg, rgba(200, 170, 110, 0.06), transparent 32%),
+    rgba(1, 10, 19, 0.35);
+  border: 1px dashed rgba(200, 170, 110, 0.3);
+  border-radius: 4px;
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.sona-wallpaper-dropzone:hover {
+  border-color: rgba(200, 170, 110, 0.5);
+  background:
+    linear-gradient(135deg, rgba(200, 170, 110, 0.09), transparent 36%),
+    rgba(9, 20, 40, 0.45);
+}
+
+.sona-wallpaper-dropzone--active {
+  border-color: rgba(200, 170, 110, 0.82);
+  background:
+    linear-gradient(135deg, rgba(200, 170, 110, 0.18), transparent 42%),
+    rgba(9, 20, 40, 0.72);
+  box-shadow:
+    inset 0 0 0 1px rgba(200, 170, 110, 0.24),
+    0 0 18px rgba(200, 170, 110, 0.18);
+}
+
+.sona-wallpaper-dropzone--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sona-wallpaper-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.sona-wallpaper-card {
+  position: relative;
+  min-width: 0;
+  padding: 8px;
+  background: rgba(30, 35, 40, 0.44);
+  border: 1px solid rgba(200, 170, 110, 0.16);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.sona-wallpaper-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(200, 170, 110, 0.34);
+  background: rgba(30, 35, 40, 0.62);
+}
+
+.sona-wallpaper-card:focus-visible {
+  outline: 1px solid rgba(200, 170, 110, 0.8);
+  outline-offset: 2px;
+}
+
+.sona-wallpaper-card--applied {
+  border-color: rgba(200, 170, 110, 0.55);
+  box-shadow: 0 0 12px rgba(200, 170, 110, 0.12);
+}
+
+.sona-wallpaper-card:hover .sona-asset-card-remove {
+  opacity: 1;
+}
+
+.sona-wallpaper-card-edit {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid rgba(200, 170, 110, 0.12);
+  border-radius: 3px;
+  background: rgba(1, 10, 19, 0.78);
+  color: #a09b8c;
+  font-size: 11px;
+  line-height: 20px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.sona-wallpaper-card:hover .sona-wallpaper-card-edit {
+  opacity: 1;
+}
+
+.sona-wallpaper-card-edit:hover {
+  background: rgba(200, 170, 110, 0.18);
+  border-color: rgba(200, 170, 110, 0.45);
+  color: #f0e6d2;
+}
+
+.sona-wallpaper-card img,
+.sona-wallpaper-card video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(120, 90, 40, 0.36);
+  border-radius: 4px;
+}
+
+.sona-wallpaper-card-name,
+.sona-wallpaper-card-action {
+  display: block;
+  color: #a09b8c;
+  font-size: 11px;
+  line-height: 1.4;
+  margin-top: 8px;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sona-wallpaper-card-action {
+  display: none;
+  color: #c8aa6e;
+  font-weight: 600;
+}
+
+.sona-wallpaper-card:hover .sona-wallpaper-card-name {
+  display: none;
+}
+
+.sona-wallpaper-card:hover .sona-wallpaper-card-action {
+  display: block;
+}
+
+.sona-wallpaper-adjust-modal {
+  display: flex;
+  flex-direction: column;
+  height: fit-content;
+  padding: 24px;
+}
+
+.sona-wallpaper-adjust-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+  min-width: 0;
+}
+
+.sona-wallpaper-adjust-header h3 {
+  margin: 0;
+  color: #f0e6d2;
+  font-size: 16px;
+  letter-spacing: 0.08em;
+}
+
+.sona-wallpaper-adjust-header span {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  color: #a09b8c;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sona-wallpaper-adjust-content {
+  flex: 1;
+  min-height: 0;
+}
+
+.sona-wallpaper-adjust-frame {
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  aspect-ratio: 16 / 9;
+  max-height: 390px;
+  margin: 0 auto;
+  background:
+    linear-gradient(135deg, rgba(200, 170, 110, 0.04), transparent 34%),
+    rgba(1, 10, 19, 0.62);
+  border: 1px dashed rgba(200, 170, 110, 0.48);
+  cursor: move;
+  user-select: none;
+}
+
+.sona-wallpaper-adjust-frame-guide {
+  position: absolute;
+  inset: 14px;
+  border: 1px dashed rgba(240, 230, 210, 0.5);
+  pointer-events: none;
+  box-shadow: 0 0 0 999px rgba(1, 10, 19, 0.12);
+}
+
+.sona-wallpaper-adjust-frame video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform-origin: center center;
+  pointer-events: none;
+}
+
+.sona-wallpaper-adjust-controls {
+  margin-top: 16px;
+}
+
+.sona-wallpaper-adjust-hint {
+  color: #785a28;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.sona-wallpaper-adjust-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.sona-avatar-dropzone {
+  min-height: 150px;
+  padding: 14px;
+  background:
+    linear-gradient(135deg, rgba(200, 170, 110, 0.06), transparent 32%),
+    rgba(1, 10, 19, 0.35);
+  border: 1px dashed rgba(200, 170, 110, 0.3);
+  border-radius: 4px;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.sona-avatar-dropzone:hover {
+  border-color: rgba(200, 170, 110, 0.5);
+  background:
+    linear-gradient(135deg, rgba(200, 170, 110, 0.09), transparent 36%),
+    rgba(9, 20, 40, 0.45);
+}
+
+.sona-avatar-dropzone--active {
+  border-color: rgba(200, 170, 110, 0.82);
+  background:
+    linear-gradient(135deg, rgba(200, 170, 110, 0.18), transparent 42%),
+    rgba(9, 20, 40, 0.72);
+  box-shadow:
+    inset 0 0 0 1px rgba(200, 170, 110, 0.24),
+    0 0 18px rgba(200, 170, 110, 0.18);
+}
+
+.sona-avatar-dropzone--active .sona-avatar-dropzone-plus {
+  border-color: rgba(200, 170, 110, 0.72);
+  background: rgba(200, 170, 110, 0.16);
+  box-shadow: 0 0 14px rgba(200, 170, 110, 0.16);
+}
+
+.sona-avatar-dropzone--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sona-avatar-dropzone-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #a09b8c;
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.sona-avatar-dropzone-plus {
+  width: 54px;
+  height: 54px;
+  border: 1px solid rgba(200, 170, 110, 0.38);
+  border-radius: 4px;
+  color: #c8aa6e;
+  font-size: 50px;
+  line-height: 38px;
+  text-align: center;
+  background: rgba(30, 35, 40, 0.45);
+}
+
+.sona-avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 10px;
+}
+
+.sona-avatar-card {
+  position: relative;
+  min-width: 0;
+  padding: 8px;
+  background: rgba(30, 35, 40, 0.44);
+  border: 1px solid rgba(200, 170, 110, 0.16);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.sona-avatar-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(200, 170, 110, 0.34);
+  background: rgba(30, 35, 40, 0.62);
+}
+
+.sona-avatar-card:focus-visible {
+  outline: 1px solid rgba(200, 170, 110, 0.8);
+  outline-offset: 2px;
+}
+
+.sona-avatar-card--applied {
+  border-color: rgba(200, 170, 110, 0.55);
+  box-shadow: 0 0 12px rgba(200, 170, 110, 0.12);
+}
+
+.sona-avatar-card:hover .sona-asset-card-remove {
+  opacity: 1;
+}
+
+.sona-avatar-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid rgba(120, 90, 40, 0.36);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.sona-avatar-card-name,
+.sona-avatar-card-action {
+  display: block;
+  margin-top: 8px;
+  color: #a09b8c;
+  font-size: 11px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.sona-avatar-card-action {
+  display: none;
+  color: #c8aa6e;
+  font-weight: 600;
+}
+
+.sona-avatar-card:hover .sona-avatar-card-name {
+  display: none;
+}
+
+.sona-avatar-card:hover .sona-avatar-card-action {
+  display: block;
+}
+
+/* ---- 英雄联想下拉 ---- */
+.sona-champ-suggest {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  background: #1e2328;
+  border: 1px solid rgba(200, 170, 110, 0.25);
+  z-index: 100;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.sona-champ-suggest::-webkit-scrollbar { width: 4px; }
+.sona-champ-suggest::-webkit-scrollbar-thumb { background: #3c2e16; border-radius: 2px; }
+
+.sona-champ-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: #a09b8c;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.sona-champ-suggest-item:hover {
+  background: rgba(200, 170, 110, 0.1);
+}
+
+.sona-champ-suggest-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(200, 170, 110, 0.3);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.sona-champ-suggest-title {
+  color: #c8aa6e;
+  font-weight: 600;
+}
+
+.sona-champ-suggest-name {
+  color: #a09b8c;
+}
+
+/* ---- 英雄优先级队列 ---- */
+.sona-champ-priority-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sona-champ-priority-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 240px;
+  padding: 8px 10px;
+  background: rgba(30, 35, 40, 0.4);
+  border: 1px solid rgba(200, 170, 110, 0.1);
+  border-radius: 4px;
+  color: #f0e6d2;
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.sona-champ-priority-card:hover {
+  transform: translateX(4px);
+  border-color: rgba(200, 170, 110, 0.28);
+  background: rgba(30, 35, 40, 0.58);
+}
+
+.sona-champ-priority-index {
+  min-width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  background: rgba(200, 170, 110, 0.18);
+  color: #c8aa6e;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.sona-champ-priority-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 3px;
+  object-fit: cover;
+  border: 1px solid rgba(200, 170, 110, 0.3);
+}
+
+.sona-champ-priority-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.sona-champ-priority-remove {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(200, 170, 110, 0.08);
+  border-radius: 3px;
+  background: rgba(120, 90, 40, 0.2);
+  color: #a09b8c;
+  line-height: 20px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.sona-champ-priority-remove:hover {
+  background: rgba(190, 64, 64, 0.28);
+  border-color: rgba(190, 64, 64, 0.45);
+  color: #f0e6d2;
+}
+
+/* ---- 设置备份列表 ---- */
+.sona-backup-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(30, 35, 40, 0.4);
+  border: 1px solid rgba(200, 170, 110, 0.1);
+  border-radius: 4px;
+  transition: border-color 0.2s;
+}
+
+.sona-backup-item:hover {
+  border-color: rgba(200, 170, 110, 0.25);
+}
+
+.sona-backup-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sona-backup-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f0e6d2;
+}
+
+.sona-backup-time {
+  font-size: 11px;
+  color: #785a28;
+}
+
+.sona-backup-actions {
+  display: flex;
+  gap: 6px;
+}

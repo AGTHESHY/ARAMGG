@@ -88,7 +88,8 @@ export const electronAPI: ElectronAPI = {
     getState: (...args) => requireElectronAPI().skinRuntime.getState(...args),
     prepare: (...args) => requireElectronAPI().skinRuntime.prepare(...args),
     clear: (...args) => requireElectronAPI().skinRuntime.clear(...args),
-    importDll: (...args) => requireElectronAPI().skinRuntime.importDll(...args),
+    downloadRepo: (...args) => requireElectronAPI().skinRuntime.downloadRepo(...args),
+    getRepoStatus: (...args) => requireElectronAPI().skinRuntime.getRepoStatus(...args),
     scanLocalMods: (...args) => requireElectronAPI().skinRuntime.scanLocalMods(...args),
     toggleMod: (...args) => requireElectronAPI().skinRuntime.toggleMod(...args),
     deleteMod: (...args) => requireElectronAPI().skinRuntime.deleteMod(...args),
@@ -126,7 +127,7 @@ export const electronAPI: ElectronAPI = {
       requireElectronAPI().lcu.validateManualLeaguePath(...args),
     setManualLeaguePath: (...args) => requireElectronAPI().lcu.setManualLeaguePath(...args),
     clearManualLeaguePath: (...args) => requireElectronAPI().lcu.clearManualLeaguePath(...args),
-    benchSwap: (...args) => requireElectronAPI().lcu.benchSwap(...args),
+
     getLobbyStats: (...args) => requireElectronAPI().lcu.getLobbyStats(...args),
     getOwnedSkins: (...args) => requireElectronAPI().lcu.getOwnedSkins(...args),
     getChampionList: (...args) => requireElectronAPI().lcu.getChampionList(...args),

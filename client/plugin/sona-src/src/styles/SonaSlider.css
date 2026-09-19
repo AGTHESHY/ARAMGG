@@ -1,0 +1,48 @@
+.sona-slider {
+  display: grid;
+  grid-template-columns: auto 135px 48px;
+  align-items: center;
+  gap: 4px;
+  color: #a09b8c;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.sona-slider-label {
+  min-width: 32px;
+  color: #f0e6d2;
+  white-space: nowrap;
+  justify-content: center;
+  align-items: center;
+}
+
+.sona-slider-input {
+  width: 160px;
+  height: 4px;
+  appearance: none;
+  border-radius: 1px;
+  background: rgba(120, 90, 40, 0.45);
+  outline: none;
+}
+
+.sona-slider-input::-webkit-slider-thumb {
+  width: 12px;
+  height: 16px;
+  appearance: none;
+  border: 1px solid rgba(240, 230, 210, 0.65);
+  border-radius: 2px;
+  background: #c8aa6e;
+  box-shadow: 0 0 8px rgba(200, 170, 110, 0.3);
+  cursor: pointer;
+}
+
+.sona-slider-input::-webkit-slider-thumb:hover {
+  background: #f0e6d2;
+}
+
+.sona-slider-value {
+  color: #c8aa6e;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}

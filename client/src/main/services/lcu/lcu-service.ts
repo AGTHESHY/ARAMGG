@@ -633,7 +633,6 @@ export class LCUService {
         gameflowPhase: `${url}/lol-gameflow/v1/gameflow-phase`,
         gameflowSession: `${url}/lol-gameflow/v1/session`,
         lobby: `${url}/lol-lobby/v2/lobby`,
-        benchSwap: `${url}/lol-champ-select/v1/session/bench/swap`,
         ownedSkins: `${url}/lol-inventory/v2/inventory/CHAMPION_SKIN`,
         championData: `${url}/lol-game-data/assets/v1/champions`,
         ownedChampions: `${url}/lol-champions/v1/owned-champions-minimal`,
@@ -1350,61 +1349,6 @@ export class LCUService {
         })
       }
       return null
-    }
-  }
-
-  /**
-   * 大乱斗无CD换英雄：直接调用 bench swap API 绕过客户端冷却限制
-   */
-  async benchSwap(championId: number): Promise<boolean> {
-    const normalizedChampionId = toPositiveInteger(championId)
-    if (!normalizedChampionId) {
-      logger.warn('[LCU] bench swap rejected: invalid champion ID', { championId })
-      return false
-    }
-
-    if (!this.active || !this.url) {
-      await this.getAuthToken()
-    }
-
-    if (!this.active || !this.urls || !this.auth) {
-      return false
-    }
-
-    const endpoint = `${this.urls.benchSwap}/${normalizedChampionId}`
-
-    try {
-      const res = await this.http.post(endpoint, {}, {
-        ...this.auth,
-        httpsAgent: this.httpsAgent,
-        validateStatus: (status) => status < 500,
-        timeout: 5000,
-      })
-
-      if (res.status >= 200 && res.status < 300) {
-        logger.info('[LCU] bench swap succeeded', { championId: normalizedChampionId, status: res.status })
-        return true
-      }
-
-      if (res.status === 401) {
-        this.invalidateAuth('bench-swap:unauthorized', null, false)
-        await this.getAuthToken(true)
-      }
-
-      logger.warn('[LCU] bench swap failed', {
-        championId: normalizedChampionId,
-        status: res.status,
-        data: res.data,
-      })
-      return false
-    } catch (error) {
-      if (!await this.recoverFromConnectionFailure('bench-swap', error)) {
-        logger.warn('[LCU] bench swap error:', {
-          championId: normalizedChampionId,
-          code: getLcuRequestErrorCode(error),
-        })
-      }
-      return false
     }
   }
 
