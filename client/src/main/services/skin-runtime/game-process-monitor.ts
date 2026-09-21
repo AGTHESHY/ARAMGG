@@ -11,6 +11,19 @@ function encodePowerShell(script: string): string {
   return Buffer.from(script, 'utf16le').toString('base64')
 }
 
+function formatPowerShellError(output: string): string {
+  // PowerShell serializes native exceptions as CLIXML when stderr is piped.
+  // Extract its human-readable <S S="Error"> records so a development
+  // terminal and the persisted log show the actual Windows error code.
+  const messages = Array.from(output.matchAll(/<S S="Error">([\s\S]*?)<\/S>/g))
+    .map((match) => match[1]
+      .replace(/_x000D__x000A_/g, '\\n')
+      .replace(/_x([0-9A-F]{4})_/gi, (_whole, hex) => String.fromCharCode(Number.parseInt(hex, 16)))
+      .trim())
+    .filter(Boolean)
+  return messages.length > 0 ? messages.join('\\n') : output.trim()
+}
+
 function quotePowerShell(value: string): string {
   return `'${value.replace(/'/g, "''")}'`
 }
@@ -47,9 +60,22 @@ while ([DateTime]::UtcNow -lt $deadline) {
       if ($result -ne 0) { throw "NtSuspendProcess failed: $result" }
       [Console]::Out.WriteLine("SUSPENDED:$($game.Id)")
       [Console]::Out.Flush()
-      Start-Sleep -Seconds ${autoResumeSeconds}
+      # Do not sleep for the whole safety period here.  runoverlay has a very
+      # short match-discovery window and exits successfully if League remains
+      # frozen after it starts.  Poll the cancellation signal in this same
+      # process, which already owns the suspend handle, so resume is immediate.
+      $resumeDeadline=[DateTime]::UtcNow.AddSeconds(${autoResumeSeconds})
+      $overlayStarted=$false
+      while ([DateTime]::UtcNow -lt $resumeDeadline) {
+        if (Test-Path -LiteralPath $cancelFile) { $overlayStarted=$true; break }
+        Start-Sleep -Milliseconds 5
+      }
       [void][AramggNativeProcess]::NtResumeProcess($handle)
-      [Console]::Out.WriteLine("AUTO_RESUMED:$($game.Id)")
+      if ($overlayStarted) {
+        [Console]::Out.WriteLine("RESUMED:$($game.Id)")
+      } else {
+        [Console]::Out.WriteLine("AUTO_RESUMED:$($game.Id)")
+      }
       [Console]::Out.Flush()
     } finally {
       [void][AramggNativeProcess]::CloseHandle($handle)
@@ -118,6 +144,14 @@ export class GameProcessMonitor {
 
   async start(): Promise<void> {
     if (process.platform !== 'win32') return
+    // A prepared skin arms this monitor before GameStart.  Calling start again
+    // during apply must not stop that monitor: stop() resumes a process that
+    // may already be frozen, creating a race where League passes the overlay
+    // hook point.  Rose keeps its existing monitor alive for this same reason.
+    if (this.monitorProcess && this.monitorProcess.exitCode === null && !this.monitorProcess.killed) {
+      logger.debug('[skin-runtime] game monitor already armed; keeping existing process')
+      return
+    }
     await this.stop('restart monitor')
     await mkdir(this.dataDirectory, { recursive: true })
     await rm(this.cancelFile, { force: true })
@@ -129,9 +163,16 @@ export class GameProcessMonitor {
     ], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
     this.monitorProcess = child
     child.stdout?.on('data', chunk => this.handleOutput(chunk.toString()))
-    child.stderr?.on('data', chunk => logger.warn('[skin-runtime] game monitor:', chunk.toString().trim()))
+    let errorOutput = ''
+    child.stderr?.on('data', chunk => { errorOutput += chunk.toString() })
     child.once('error', error => logger.warn('[skin-runtime] failed to start game monitor', error))
-    child.once('exit', () => {
+    child.once('exit', code => {
+      const message = formatPowerShellError(errorOutput)
+      if (message) {
+        logger.warn('[skin-runtime] game monitor exited with an error', { code, error: message })
+      } else {
+        logger.info('[skin-runtime] game monitor exited', { code })
+      }
       if (this.monitorProcess === child) this.monitorProcess = null
     })
   }
@@ -151,6 +192,11 @@ export class GameProcessMonitor {
         logger.warn('[skin-runtime] League process reached the monitor auto-resume timeout')
         this.suspendedProcessId = null
       }
+      const resumed = /^RESUMED:(\d+)$/.exec(line.trim())
+      if (resumed) {
+        this.suspendedProcessId = null
+        logger.info('[skin-runtime] League process resumed by monitor', { processId: Number(resumed[1]) })
+      }
     }
   }
 
@@ -158,7 +204,9 @@ export class GameProcessMonitor {
     if (process.platform !== 'win32') return
     this.overlayStarted = true
     await writeFile(this.cancelFile, 'runoverlay-started', 'utf8').catch(() => {})
-    await this.resume('runoverlay started')
+    // The active monitor observes this file every 5 ms and resumes using the
+    // handle it already owns.  Spawning another PowerShell process here takes
+    // hundreds of milliseconds, long enough for runoverlay to give up.
   }
 
   async stop(reason = 'monitor stopped'): Promise<void> {

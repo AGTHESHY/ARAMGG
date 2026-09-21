@@ -346,6 +346,9 @@ export async function prepareSkin(selection: SkinRuntimeSelection): Promise<Skin
     }
     if (generation !== operationGeneration) return getSkinRuntimeState()
     setState({ phase: 'prepared', progress: 100, selection: normalized, message: `${normalized.skinName} 已准备，将在游戏开始时应用` })
+    // Match Rose's injection timing: begin watching before the game process is
+    // created, rather than racing it after LCU has already entered GameStart.
+    await getGameProcessMonitor().start()
     recordTiming('prepare-total', startedAt)
     if (pendingApplyLeagueRoot) void applyPreparedSkin(pendingApplyLeagueRoot)
   } catch (error) {
@@ -356,6 +359,15 @@ export async function prepareSkin(selection: SkinRuntimeSelection): Promise<Skin
     }
   }
   return getSkinRuntimeState()
+}
+
+/** Re-arm the short-lived process gate when a new champion-select starts.
+ * A skin can have been prepared in a previous lobby, after the first monitor
+ * naturally timed out. */
+export async function armPreparedSkinMonitor(): Promise<void> {
+  if (!state.supported || !state.selection || !['prepared', 'error'].includes(state.phase)) return
+  await getGameProcessMonitor().start()
+  logger.info('[skin-runtime] game monitor armed for prepared skin')
 }
 
 function run(command: string, args: string[], timeoutMs: number): Promise<void> {
@@ -409,6 +421,7 @@ export async function applyPreparedSkin(leagueRoot: string): Promise<SkinRuntime
       return getSkinRuntimeState()
     }
     const runStart = Date.now()
+    let runoverlayExited: { code: number | null; signal: NodeJS.Signals | null } | null = null
     activeProcess = await new Promise<ChildProcess>((resolve, reject) => {
       const child = spawn(tool, ['runoverlay', overlay, path.join(overlay, 'cslol-config.json'), `--game:${gameDirectory}`, '--opts:configless'], {
         windowsHide: true,
@@ -417,15 +430,30 @@ export async function applyPreparedSkin(leagueRoot: string): Promise<SkinRuntime
       })
       child.stdout?.on('data', chunk => logger.info('[skin-runtime] runoverlay stdout:', chunk.toString().trim()))
       child.stderr?.on('data', chunk => logger.warn('[skin-runtime] runoverlay stderr:', chunk.toString().trim()))
+      // Register this before waiting for monitor resume.  runoverlay can fail
+      // within a few milliseconds of spawn; registering below markOverlayStarted
+      // loses that terminal event and leaves no usable DLL diagnostic.
+      child.once('exit', (code, signal) => {
+        runoverlayExited = { code, signal }
+        if (activeProcess === child) activeProcess = null
+        logger.info('[skin-runtime] runoverlay exited', {
+          code,
+          signal,
+          durationMs: Date.now() - runStart,
+        })
+      })
       child.once('spawn', () => resolve(child))
       child.once('error', reject)
     })
     recordTiming('runoverlay-spawn', runStart)
     await processMonitor.markOverlayStarted()
-    activeProcess.once('exit', code => {
-      activeProcess = null
-      if (generation === operationGeneration && state.phase === 'active') setState({ phase: code === 0 ? 'prepared' : 'error', message: code === 0 ? '本局本地替换已结束' : `本地覆盖层意外退出（${code}）` })
-    })
+    if (runoverlayExited) {
+      const { code } = runoverlayExited
+      if (generation === operationGeneration) {
+        setState({ phase: 'error', message: `本地覆盖层启动后立即退出（${code ?? 'unknown'}）` })
+      }
+      return getSkinRuntimeState()
+    }
     setState({ phase: 'active', message: `${state.selection.skinName} 的本地替换正在运行` })
     recordTiming('apply-total', startedAt)
     pendingApplyLeagueRoot = ''

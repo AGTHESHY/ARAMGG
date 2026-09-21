@@ -70,7 +70,8 @@ import {
     shouldShowLobbyStats,
 } from './user-preferences.ts'
 import { GameSessionCoordinator } from '../services/game-session/game-session-machine.ts'
-import { applyPreparedSkin, stopSkinOverlay } from '../services/skin-runtime/skin-runtime-service.ts'
+import { applyPreparedSkin, armPreparedSkinMonitor, stopSkinOverlay } from '../services/skin-runtime/skin-runtime-service.ts'
+import { discoverInstalledLeagueDirectory, getLastDiscoveredLeagueDirectory } from '../services/lcu/token-loader.ts'
 import { shouldRaiseOverlayWindow } from './overlay-window-state.ts'
 import {
     GAMEFLOW_ACTIVE_CAPTURE_INTERVAL_MS,
@@ -1334,16 +1335,28 @@ async function initGameFlowMonitor() {
                         resetChampSelectItemSetState(`LCU phase ${phase}`)
                         notifyAllWindows('champ-select-start', {})
                         stopAutoScreenshotForGame('LCU phase ChampSelect')
+                        void armPreparedSkinMonitor()
                         await showChampionInsightForChampSelect(lcuService)
                         break
-                    case 'ENTER_GAME_START':
+                    case 'ENTER_GAME_START': {
                         logger.info('游戏开始加载')
                         resetPostGameShareSnapshot('LCU phase GameStart')
                         notifyAllWindows('game-started', {})
                         resetChampSelectItemSetState('LCU phase GameStart')
                         stopAutoScreenshotForGame('LCU phase GameStart')
-                        void applyPreparedSkin(String(store.get('lolPath') || ''))
+                        const configuredLeagueRoot = String(store.get('lolPath') || '')
+                        const discoveredLeagueRoot = getLastDiscoveredLeagueDirectory()
+                            || await discoverInstalledLeagueDirectory()
+                            || ''
+                        const leagueRoot = configuredLeagueRoot || discoveredLeagueRoot
+                        if (!configuredLeagueRoot && discoveredLeagueRoot) {
+                            logger.info('[skin-runtime] using automatically discovered League directory', {
+                                leagueRoot: discoveredLeagueRoot,
+                            })
+                        }
+                        void applyPreparedSkin(leagueRoot)
                         break
+                    }
                     case 'ENTER_IN_PROGRESS':
                         logger.info('游戏进行中 - 启动自动截图来检测海克斯选择')
                         notifyAllWindows('game-in-progress', {})

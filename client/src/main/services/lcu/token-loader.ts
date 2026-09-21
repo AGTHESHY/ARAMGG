@@ -15,6 +15,54 @@ import path from 'path'
 const MANUAL_LEAGUE_PATH_KEY = 'lolPath'
 let manualFallbackSuccessLogged = false
 let commonPathFallbackSuccessLogged = false
+let lastDiscoveredLeagueDirectory: string | null = null
+
+/**
+ * Returns the installation root used by the most recent successful automatic
+ * LCU discovery. This is intentionally runtime-only: automatic discovery must
+ * not overwrite a directory the user explicitly configured.
+ */
+export function getLastDiscoveredLeagueDirectory(): string | null {
+  return lastDiscoveredLeagueDirectory
+}
+
+async function isLeagueInstallation(directory: string): Promise<boolean> {
+  try {
+    return (await stat(path.join(directory, 'Game', 'League of Legends.exe'))).isFile()
+  } catch {
+    return false
+  }
+}
+
+/** Locate a usable League installation even when LCU itself was discovered
+ * from process arguments.  Process-based auth does not carry its install root
+ * on WeGame, so it must not be the only source for the skin runtime path. */
+export async function discoverInstalledLeagueDirectory(): Promise<string | null> {
+  const configured = getManualLeaguePath()
+  if (configured && await isLeagueInstallation(configured)) return configured
+  if (lastDiscoveredLeagueDirectory && await isLeagueInstallation(lastDiscoveredLeagueDirectory)) {
+    return lastDiscoveredLeagueDirectory
+  }
+
+  for (const libraryRoot of COMMON_LEAGUE_LIBRARY_ROOTS) {
+    let entries
+    try {
+      entries = await readdir(libraryRoot, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !LEAGUE_DIRECTORY_NAME.test(entry.name)) continue
+      const directory = path.join(libraryRoot, entry.name)
+      if (await isLeagueInstallation(directory)) {
+        lastDiscoveredLeagueDirectory = directory
+        logger.info('[skin-runtime] discovered League installation directory', { directory })
+        return directory
+      }
+    }
+  }
+  return null
+}
 
 function getManualLeaguePath(explicitDirPath?: string | null): string | null {
   const explicitPath = String(explicitDirPath || '').trim()
@@ -87,6 +135,7 @@ async function discoverLcuAuthFromCommonLeagueDirectories(): Promise<TokenLoadRe
       const leagueDirectory = path.join(libraryRoot, entry.name)
       const result = await discoverLcuAuthFromManualDirectory(leagueDirectory)
       if (result[0] && result[1]) {
+        lastDiscoveredLeagueDirectory = leagueDirectory
         logger.info('[getLcuToken] 已通过 WeGame/常见游戏库目录发现 LCU 凭据', {
           leagueDirectory,
           port: result[1],
@@ -152,6 +201,7 @@ export async function getLcuToken(
     if (manualLeaguePath) {
       const manualResult = await discoverLcuAuthFromManualDirectory(manualLeaguePath)
       if (manualResult[0] && manualResult[1]) {
+        lastDiscoveredLeagueDirectory = manualLeaguePath
         if (!manualFallbackSuccessLogged) {
           manualFallbackSuccessLogged = true
           logger.info('[getLcuToken] 已通过手动目录兜底发现 LCU 凭据')

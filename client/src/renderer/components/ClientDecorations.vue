@@ -37,7 +37,7 @@
             @click="setEmote(emote.itemId)"
           >
             <img
-              :src="getEmoteIconUrl(emote.itemId)"
+              :src="getDecorationIconUrl(emote)"
               :alt="'表情 ' + emote.itemId"
               class="decor-image"
               loading="lazy"
@@ -65,7 +65,7 @@
             class="decor-card ward"
           >
             <img
-              :src="getWardIconUrl(ward.itemId)"
+              :src="getDecorationIconUrl(ward)"
               :alt="'守卫 ' + ward.itemId"
               class="decor-image"
               loading="lazy"
@@ -100,17 +100,23 @@ const error = ref('')
 const selectedEmoteId = ref<number | null>(null)
 const settingEmote = ref<number | null>(null)
 
-const getEmoteIconUrl = (emoteId: number): string => {
-  return `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/assets/loot/2784-emote-${emoteId}.png`
-}
-
-const getWardIconUrl = (wardId: number): string => {
-  return `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/content/src/loot/ward_skin_${wardId}.png`
+const getDecorationIconUrl = (item: DecorationItem): string => {
+  const source = String(item.iconPath || item.iconUrl || item.imagePath || item.image || '')
+  if (/^https?:\/\//i.test(source)) return source
+  if (source.startsWith('/lol-game-data/')) {
+    return `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default${source.slice('/lol-game-data'.length)}`
+  }
+  if (source.startsWith('/')) {
+    return `https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default${source}`
+  }
+  // Do not manufacture the former 2784-emote-{id} URL: it now returns 404
+  // for every item. A missing client icon is represented explicitly instead.
+  return ''
 }
 
 const onImgError = (e: Event) => {
   const img = e.target as HTMLImageElement
-  img.style.opacity = '0.2'
+  img.style.display = 'none'
 }
 
 const loadData = async () => {
