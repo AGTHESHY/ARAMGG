@@ -331,10 +331,9 @@ const loadData = async () => {
   selectStatus.value = ''
 
   try {
-    const [champResult, skinsResult] = await Promise.all([
-      electronAPI.lcu.getChampionList(),
-      electronAPI.lcu.getOwnedSkins(),
-    ])
+    // Keep the calls separate while loading so an IPC failure can be assigned
+    // to the failing endpoint instead of being hidden by Promise.all.
+    const champResult = await electronAPI.lcu.getChampionList()
 
     if (champResult.success && champResult.champions) {
       champions.value = champResult.champions.sort((a, b) =>
@@ -342,13 +341,18 @@ const loadData = async () => {
       )
     } else {
       error.value = champResult.error || '无法获取英雄列表，请确保游戏客户端已启动'
+      return
     }
+
+    const skinsResult = await electronAPI.lcu.getOwnedSkins()
 
     if (skinsResult.success && skinsResult.skinIds) {
       ownedSkins.value = new Set(skinsResult.skinIds)
     }
-  } catch {
-    error.value = '连接客户端失败，请确保游戏客户端已启动'
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[SkinBrowser] failed to load LCU skin data', err)
+    error.value = `连接客户端失败：${message}`
   } finally {
     loading.value = false
   }

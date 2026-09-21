@@ -410,7 +410,13 @@ export async function applyPreparedSkin(leagueRoot: string): Promise<SkinRuntime
     }
     const runStart = Date.now()
     activeProcess = await new Promise<ChildProcess>((resolve, reject) => {
-      const child = spawn(tool, ['runoverlay', overlay, path.join(overlay, 'cslol-config.json'), `--game:${gameDirectory}`, '--opts:configless'], { windowsHide: true, detached: false, stdio: 'ignore' })
+      const child = spawn(tool, ['runoverlay', overlay, path.join(overlay, 'cslol-config.json'), `--game:${gameDirectory}`, '--opts:configless'], {
+        windowsHide: true,
+        detached: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      child.stdout?.on('data', chunk => logger.info('[skin-runtime] runoverlay stdout:', chunk.toString().trim()))
+      child.stderr?.on('data', chunk => logger.warn('[skin-runtime] runoverlay stderr:', chunk.toString().trim()))
       child.once('spawn', () => resolve(child))
       child.once('error', reject)
     })

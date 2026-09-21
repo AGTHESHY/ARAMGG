@@ -4,14 +4,21 @@ import logger from '../../src/main/modules/logger.ts'
 import { LCUService } from '../../src/main/services/lcu/lcu-service.ts'
 import { getLcuToken } from '../../src/main/services/lcu/token-loader.ts'
 
-vi.mock('axios', () => ({
-  default: {
+vi.mock('axios', () => {
+  const client = {
     get: vi.fn(),
     put: vi.fn(),
     post: vi.fn(),
     delete: vi.fn(),
-  },
-}))
+  }
+
+  return {
+    default: {
+      ...client,
+      create: vi.fn(() => client),
+    },
+  }
+})
 
 vi.mock('../../src/main/modules/logger.ts', () => ({
   default: {

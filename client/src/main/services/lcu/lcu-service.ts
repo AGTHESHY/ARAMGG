@@ -1564,6 +1564,24 @@ export class LCUService {
           timeout: 5000,
         })
       }
+
+      // Tencent/WeGame clients do not expose the Riot endpoint
+      // `/lol-game-data/v1/champion-summary` (it returns 404).  The owned
+      // champions endpoint exposes the same brief fields required by the skin
+      // browser and remains available on those clients.
+      if (res.status === 404) {
+        logger.info('[LCU] champion summary unavailable; using owned champions fallback', {
+          fallbackEndpoint: 'owned-champions-minimal',
+          sensitiveValuesLogged: false,
+        })
+        res = await this.http.get(this.urls!.ownedChampions, {
+          ...this.auth,
+          httpsAgent: this.httpsAgent,
+          validateStatus: (status) => status < 500,
+          timeout: 5000,
+        })
+      }
+
       if (!Array.isArray(res.data)) return []
       return res.data
         .filter((item: any) => item && typeof item.id === 'number' && item.id > 0)

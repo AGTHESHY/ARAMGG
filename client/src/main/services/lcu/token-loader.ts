@@ -9,7 +9,7 @@ import { discoverLcuAuthFromManualDirectory } from './manual-directory-auth.ts'
 import { discoverLcuAuthFromProcess } from './process-auth-discovery.ts'
 import { parseLcuAuthFromLockfile } from './process-auth-discovery.ts'
 import { TokenLoadResult } from './types.ts'
-import { readFile, stat } from 'fs/promises'
+import { readFile, readdir, stat } from 'fs/promises'
 import path from 'path'
 
 const MANUAL_LEAGUE_PATH_KEY = 'lolPath'
@@ -49,6 +49,55 @@ const COMMON_LOCKFILE_PATHS: string[] = [
   'F:\\Riot Games\\League of Legends\\lockfile',
   'G:\\Riot Games\\League of Legends\\lockfile',
 ]
+
+/**
+ * Tencent/WeGame installs commonly put the client under a versioned child
+ * directory (for example `E:\\Game\\WeGame\\英雄联盟(26)`).  Those paths cannot be
+ * represented safely by a static list.  We only inspect immediate children of
+ * known game-library roots and reuse the normal manual-directory discovery,
+ * which falls back to the readable LeagueClientUx log when the live lockfile
+ * is exclusively locked by the client.
+ */
+const COMMON_LEAGUE_LIBRARY_ROOTS = [
+  'C:\\Game\\WeGame',
+  'D:\\Game\\WeGame',
+  'E:\\Game\\WeGame',
+  'F:\\Game\\WeGame',
+  'G:\\Game\\WeGame',
+  'C:\\WeGameApps',
+  'D:\\WeGameApps',
+  'E:\\WeGameApps',
+  'F:\\WeGameApps',
+  'G:\\WeGameApps',
+]
+
+const LEAGUE_DIRECTORY_NAME = /^(?:League of Legends|LeagueOfLegends|英雄联盟)(?:\s*\([^)]*\))?$/i
+
+async function discoverLcuAuthFromCommonLeagueDirectories(): Promise<TokenLoadResult> {
+  for (const libraryRoot of COMMON_LEAGUE_LIBRARY_ROOTS) {
+    let entries
+    try {
+      entries = await readdir(libraryRoot, { withFileTypes: true })
+    } catch {
+      continue
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !LEAGUE_DIRECTORY_NAME.test(entry.name)) continue
+      const leagueDirectory = path.join(libraryRoot, entry.name)
+      const result = await discoverLcuAuthFromManualDirectory(leagueDirectory)
+      if (result[0] && result[1]) {
+        logger.info('[getLcuToken] 已通过 WeGame/常见游戏库目录发现 LCU 凭据', {
+          leagueDirectory,
+          port: result[1],
+        })
+        return result
+      }
+    }
+  }
+
+  return [null, null, null]
+}
 
 /**
  * 从常见安装路径中查找 lockfile 并提取 LCU 凭据。
@@ -115,7 +164,15 @@ export async function getLcuToken(
       logger.debug('[getLcuToken] 手动目录兜底未发现 LCU 凭据')
     }
 
-    // 3. 最后兜底：从常见安装路径查找 lockfile（参考 Rose 项目）
+    // 3. 尝试 WeGame 等版本化游戏库目录。该路径下的 lockfile 可能被
+    //    LeagueClient 独占锁定，因此 discoverLcuAuthFromManualDirectory 会继续
+    //    从同目录的 LeagueClientUx 日志读取临时认证信息。
+    const commonDirectoryResult = await discoverLcuAuthFromCommonLeagueDirectories()
+    if (commonDirectoryResult[0] && commonDirectoryResult[1]) {
+      return commonDirectoryResult
+    }
+
+    // 4. 最后兜底：从常见安装路径查找 lockfile（参考 Rose 项目）
     const commonResult = await discoverLcuAuthFromCommonLockfilePaths()
     if (commonResult[0] && commonResult[1]) {
       return commonResult
